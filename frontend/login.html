@@ -10,6 +10,7 @@
 <div class="login-container">
     <h1>NOVA</h1>
     <h2>로그인 / 회원가입</h2>
+    <input id="nickname" type="text" placeholder="닉네임 (회원가입 시 입력)" autocomplete="nickname" maxlength="40">
     <input id="email" type="email" placeholder="이메일" autocomplete="email">
     <input id="password" type="password" placeholder="비밀번호" autocomplete="current-password">
     <button id="loginButton" type="button">로그인</button>
@@ -21,6 +22,7 @@ import { supabase } from "./supabase.js";
 
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
+const nicknameInput = document.getElementById("nickname");
 const message = document.getElementById("message");
 
 document.getElementById("loginButton").addEventListener("click", login);
@@ -44,10 +46,15 @@ async function login() {
 }
 
 async function register() {
+    const nickname = nicknameInput.value.trim();
     const email = emailInput.value.trim();
     const password = passwordInput.value;
-    if (!email || !password) {
-        message.textContent = "이메일과 비밀번호를 입력하세요.";
+    if (!nickname || !email || !password) {
+        message.textContent = "닉네임, 이메일, 비밀번호를 입력하세요.";
+        return;
+    }
+    if (nickname.length > 40) {
+        message.textContent = "닉네임은 40자 이내로 입력하세요.";
         return;
     }
     if (password.length < 6) {
@@ -56,7 +63,7 @@ async function register() {
     }
 
     message.textContent = "회원가입 중...";
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { nickname }, emailRedirectTo: window.location.origin } });
     if (error) {
         message.textContent = `회원가입 실패: ${error.message}`;
         return;
