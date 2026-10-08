@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a id="authLink" href="login.html">로그인</a><a href="admin.html">관리자</a></div></header>
+<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a id="authLink" href="login.html">로그인</a><a id="adminLink" href="admin.html" hidden>관리자</a></div></header>
 <main class="upload-container">
     <h1>영상 업로드</h1>
     <input id="title" type="text" placeholder="영상 제목">
@@ -18,6 +18,7 @@
 <script type="module">
 import { API_BASE_URL } from "./api-config.js";
 const authLink = document.getElementById("authLink");
+const adminLink = document.getElementById("adminLink");
 const titleInput = document.getElementById("title");
 const fileInput = document.getElementById("videoFile");
 const button = document.getElementById("uploadButton");
@@ -25,6 +26,7 @@ const message = document.getElementById("message");
 button.addEventListener("click", uploadVideo);
 
 function updateAuthLink(session) {
+    if (!session) adminLink.hidden = true;
     if (session) {
         authLink.textContent = "로그아웃";
         authLink.href = "#logout";
@@ -46,6 +48,18 @@ async function logout(event) {
 }
 
 updateAuthLink(localStorage.getItem("nova_access_token"));
+
+async function showAdminLinkForAdmins() {
+    const token = localStorage.getItem("nova_access_token");
+    if (!token) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) return;
+        const user = await response.json();
+        adminLink.hidden = !user.is_admin;
+    } catch (error) { console.error("관리자 메뉴 권한 확인 실패", error); }
+}
+showAdminLinkForAdmins();
 
 async function uploadVideo() {
     const title = titleInput.value.trim();

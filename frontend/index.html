@@ -13,7 +13,7 @@
         <input id="searchInput" type="search" placeholder="영상 제목 검색" aria-label="영상 제목 검색">
         <button type="submit">검색</button>
     </form>
-    <div class="nav-buttons"><a id="authLink" href="login.html">로그인</a><a href="upload.html">업로드</a><a href="admin.html">관리자</a></div>
+    <div class="nav-buttons"><a id="authLink" href="login.html">로그인</a><a href="upload.html">업로드</a><a id="adminLink" href="admin.html" hidden>관리자</a></div>
 </header>
 <main class="container">
     <h1 id="pageTitle">최신 영상</h1>
@@ -25,6 +25,7 @@ const videoGrid = document.getElementById("videoGrid");
 const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
 const pageTitle = document.getElementById("pageTitle");
+const adminLink = document.getElementById("adminLink");
 let allVideos = [];
 
 const authLink = document.getElementById("authLink");
@@ -38,6 +39,7 @@ async function logout(event) {
 }
 
 function updateAuthLink(session) {
+    if (!session) adminLink.hidden = true;
     if (session) {
         authLink.textContent = "로그아웃";
         authLink.href = "#logout";
@@ -50,6 +52,18 @@ function updateAuthLink(session) {
 }
 
 updateAuthLink(localStorage.getItem("nova_access_token"));
+
+async function showAdminLinkForAdmins() {
+    const token = localStorage.getItem("nova_access_token");
+    if (!token) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) return;
+        const user = await response.json();
+        adminLink.hidden = !user.is_admin;
+    } catch (error) { console.error("관리자 메뉴 권한 확인 실패", error); }
+}
+showAdminLinkForAdmins();
 
 function renderVideos(query = "") {
     const normalizedQuery = query.trim().toLocaleLowerCase();
