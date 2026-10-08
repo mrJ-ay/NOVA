@@ -56,7 +56,7 @@ async function register() {
     }
 
     message.textContent = "회원가입 중...";
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
     if (error) {
         message.textContent = `회원가입 실패: ${error.message}`;
         return;

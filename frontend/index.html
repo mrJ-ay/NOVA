@@ -13,20 +13,14 @@
         <input id="searchInput" type="search" placeholder="영상 제목 검색" aria-label="영상 제목 검색">
         <button type="submit">검색</button>
     </form>
-    <div class="nav-buttons">
-        <a href="login.html">로그인</a>
-        <a href="upload.html">업로드</a>
-    </div>
+    <div class="nav-buttons"><a href="login.html">로그인</a><a href="upload.html">업로드</a></div>
 </header>
 <main class="container">
     <h1 id="pageTitle">최신 영상</h1>
-    <section id="videoGrid" class="video-grid" aria-live="polite">
-        <p>영상을 불러오는 중...</p>
-    </section>
+    <section id="videoGrid" class="video-grid" aria-live="polite"><p>영상을 불러오는 중...</p></section>
 </main>
 <script type="module">
-import { supabase } from "./supabase.js";
-
+import { API_BASE_URL } from "./api-config.js";
 const videoGrid = document.getElementById("videoGrid");
 const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
@@ -35,77 +29,50 @@ let allVideos = [];
 
 function renderVideos(query = "") {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    const filteredVideos = allVideos.filter((video) =>
-        (video.title || "").toLocaleLowerCase().includes(normalizedQuery)
-    );
-
+    const filtered = allVideos.filter(v => (v.title || "").toLocaleLowerCase().includes(normalizedQuery));
     videoGrid.replaceChildren();
-    pageTitle.textContent = normalizedQuery
-        ? `검색 결과 (${filteredVideos.length})`
-        : "최신 영상";
-
-    if (filteredVideos.length === 0) {
-        const message = document.createElement("p");
-        message.textContent = normalizedQuery
-            ? "검색 결과가 없습니다. 다른 제목으로 검색해 보세요."
-            : "아직 업로드된 영상이 없습니다.";
-        videoGrid.appendChild(message);
+    pageTitle.textContent = normalizedQuery ? `검색 결과 (${filtered.length})` : "최신 영상";
+    if (!filtered.length) {
+        const p = document.createElement("p");
+        p.textContent = normalizedQuery ? "검색 결과가 없습니다. 다른 제목으로 검색해 보세요." : "아직 업로드된 영상이 없습니다.";
+        videoGrid.appendChild(p);
         return;
     }
-
-    filteredVideos.forEach((video) => {
-        const { data } = supabase.storage
-            .from("videos")
-            .getPublicUrl(video.storage_path);
-
+    filtered.forEach(v => {
         const card = document.createElement("article");
         card.className = "video-card";
-
-        const thumbnail = document.createElement("video");
-        thumbnail.className = "thumbnail-video";
-        thumbnail.src = data.publicUrl;
-        thumbnail.muted = true;
-        thumbnail.preload = "metadata";
-        thumbnail.playsInline = true;
-        thumbnail.setAttribute("aria-label", `${video.title} 미리보기`);
-
+        const preview = document.createElement("video");
+        preview.className = "thumbnail-video";
+        preview.src = v.url;
+        preview.muted = true;
+        preview.preload = "metadata";
+        preview.playsInline = true;
         const title = document.createElement("h2");
-        title.textContent = video.title;
-
-        const channel = document.createElement("p");
-        channel.textContent = "NOVA";
-
-        card.append(thumbnail, title, channel);
-        card.addEventListener("click", () => {
-            window.location.href = `player.html?video=${encodeURIComponent(video.id)}`;
-        });
+        title.textContent = v.title;
+        const label = document.createElement("p");
+        label.textContent = "NOVA";
+        card.append(preview, title, label);
+        card.addEventListener("click", () => location.href = `player.html?video=${encodeURIComponent(v.id)}`);
         videoGrid.appendChild(card);
     });
 }
 
 async function loadVideos() {
-    const { data, error } = await supabase
-        .from("videos")
-        .select("id, title, storage_path, created_at")
-        .order("created_at", { ascending: false });
-
-    if (error) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/videos`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "영상 목록을 불러오지 못했습니다.");
+        allVideos = data;
+        renderVideos(searchInput.value);
+    } catch (error) {
         console.error(error);
         videoGrid.replaceChildren();
-        const message = document.createElement("p");
-        message.textContent = `영상 목록을 불러오지 못했습니다: ${error.message}`;
-        videoGrid.appendChild(message);
-        return;
+        const p = document.createElement("p");
+        p.textContent = `영상 목록을 불러오지 못했습니다: ${error.message}`;
+        videoGrid.appendChild(p);
     }
-
-    allVideos = data || [];
-    renderVideos(searchInput.value);
 }
-
-searchForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    renderVideos(searchInput.value);
-});
+searchForm.addEventListener("submit", e => { e.preventDefault(); renderVideos(searchInput.value); });
 searchInput.addEventListener("input", () => renderVideos(searchInput.value));
 loadVideos();
 </script>

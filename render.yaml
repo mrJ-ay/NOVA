@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: nova-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+  - type: web
+    name: nova-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: printf 'export const API_BASE_URL = "%s";\n' "$NOVA_API_URL" > api-config.js
+    staticPublishPath: .
+    envVars:
+      - key: NOVA_API_URL
+        fromService:
+          type: web
+          name: nova-api
+          envVarKey: RENDER_EXTERNAL_URL

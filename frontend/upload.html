@@ -7,14 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="navbar">
-    <div class="logo">NOVA</div>
-    <div class="nav-buttons">
-        <a href="index.html">홈</a>
-        <a href="login.html">로그인</a>
-    </div>
-</header>
-
+<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a href="login.html">로그인</a></div></header>
 <main class="upload-container">
     <h1>영상 업로드</h1>
     <input id="title" type="text" placeholder="영상 제목">
@@ -22,85 +15,44 @@
     <button id="uploadButton" type="button">업로드</button>
     <p id="message" aria-live="polite"></p>
 </main>
-
 <script type="module">
 import { supabase } from "./supabase.js";
-
+import { API_BASE_URL } from "./api-config.js";
 const titleInput = document.getElementById("title");
 const fileInput = document.getElementById("videoFile");
-const uploadButton = document.getElementById("uploadButton");
+const button = document.getElementById("uploadButton");
 const message = document.getElementById("message");
-
-uploadButton.addEventListener("click", uploadVideo);
+button.addEventListener("click", uploadVideo);
 
 async function uploadVideo() {
     const title = titleInput.value.trim();
     const file = fileInput.files[0];
-
-    if (!title) {
-        message.textContent = "영상 제목을 입력하세요.";
-        return;
-    }
-    if (!file) {
-        message.textContent = "영상을 선택하세요.";
-        return;
-    }
-
-    const { data: userResult, error: userError } = await supabase.auth.getUser();
-    const user = userResult?.user;
-    if (userError || !user) {
-        message.textContent = "업로드하려면 먼저 로그인하세요.";
-        return;
-    }
-
-    const extension = file.name.includes(".")
-        ? file.name.split(".").pop().toLowerCase()
-        : "";
-    const allowedExtensions = ["mp4", "webm", "mov", "mkv", "avi"];
-    if (!allowedExtensions.includes(extension)) {
-        message.textContent = "MP4, WebM, MOV, MKV, AVI 파일만 업로드할 수 있습니다.";
-        return;
-    }
-
-    const storagePath = `${user.id}/${crypto.randomUUID()}.${extension}`;
-    uploadButton.disabled = true;
-    message.textContent = "영상 업로드 중입니다. 파일 크기에 따라 시간이 걸릴 수 있습니다.";
-
-    const { error: uploadError } = await supabase.storage
-        .from("videos")
-        .upload(storagePath, file, {
-            cacheControl: "3600",
-            contentType: file.type || "application/octet-stream",
-            upsert: false
+    if (!title) { message.textContent = "영상 제목을 입력하세요."; return; }
+    if (!file) { message.textContent = "영상을 선택하세요."; return; }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { message.textContent = "로그인 후 업로드하세요."; return; }
+    button.disabled = true;
+    message.textContent = "영상 업로드 중...";
+    try {
+        const form = new FormData();
+        form.append("title", title);
+        form.append("file", file);
+        const response = await fetch(`${API_BASE_URL}/api/upload`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.access_token}` },
+            body: form
         });
-
-    if (uploadError) {
-        console.error(uploadError);
-        message.textContent = `파일 업로드 실패: ${uploadError.message}`;
-        uploadButton.disabled = false;
-        return;
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "업로드에 실패했습니다.");
+        message.textContent = "업로드가 완료됐습니다.";
+        titleInput.value = "";
+        fileInput.value = "";
+    } catch (error) {
+        console.error(error);
+        message.textContent = `업로드 실패: ${error.message}`;
+    } finally {
+        button.disabled = false;
     }
-
-    const { error: databaseError } = await supabase
-        .from("videos")
-        .insert({ title, storage_path: storagePath, user_id: user.id });
-
-    if (databaseError) {
-        console.error(databaseError);
-        const { error: cleanupError } = await supabase.storage
-            .from("videos")
-            .remove([storagePath]);
-        if (cleanupError) console.error("업로드 파일 정리 실패:", cleanupError);
-
-        message.textContent = `영상 정보 저장 실패: ${databaseError.message}`;
-        uploadButton.disabled = false;
-        return;
-    }
-
-    message.textContent = "업로드가 완료됐습니다.";
-    titleInput.value = "";
-    fileInput.value = "";
-    uploadButton.disabled = false;
 }
 </script>
 </body>

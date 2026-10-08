@@ -7,60 +7,30 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="navbar">
-    <div class="logo">NOVA</div>
-    <div class="nav-buttons">
-        <a href="index.html">홈</a>
-        <a href="upload.html">업로드</a>
-    </div>
-</header>
-
+<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a href="upload.html">업로드</a></div></header>
 <main class="player-page">
-    <div class="player">
-        <video id="player" controls playsinline></video>
-    </div>
+    <div class="player"><video id="player" controls playsinline></video></div>
     <h1 id="videoTitle">영상을 불러오는 중...</h1>
     <p id="videoInfo">NOVA</p>
 </main>
-
 <script type="module">
-import { supabase } from "./supabase.js";
-
-const params = new URLSearchParams(window.location.search);
-const videoId = params.get("video");
+import { API_BASE_URL } from "./api-config.js";
+const videoId = new URLSearchParams(location.search).get("video");
 const player = document.getElementById("player");
-const videoTitle = document.getElementById("videoTitle");
-
+const title = document.getElementById("videoTitle");
 async function loadVideo() {
-    if (!videoId) {
-        videoTitle.textContent = "영상 주소가 올바르지 않습니다.";
-        return;
-    }
-
-    const { data: video, error } = await supabase
-        .from("videos")
-        .select("title, storage_path")
-        .eq("id", videoId)
-        .maybeSingle();
-
-    if (error || !video) {
+    if (!videoId) { title.textContent = "영상 주소가 올바르지 않습니다."; return; }
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/videos/${encodeURIComponent(videoId)}`);
+        const video = await response.json();
+        if (!response.ok) throw new Error(video.detail || "영상을 찾을 수 없습니다.");
+        title.textContent = video.title;
+        player.src = video.url;
+    } catch (error) {
         console.error(error);
-        videoTitle.textContent = "영상을 찾을 수 없습니다.";
-        return;
+        title.textContent = `영상 재생 실패: ${error.message}`;
     }
-
-    const { data } = supabase.storage
-        .from("videos")
-        .getPublicUrl(video.storage_path);
-
-    videoTitle.textContent = video.title;
-    player.src = data.publicUrl;
 }
-
-player.addEventListener("error", () => {
-    videoTitle.textContent = "영상을 재생할 수 없습니다.";
-});
-
 loadVideo();
 </script>
 </body>

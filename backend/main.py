@@ -1,331 +1,135 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.orm import declarative_base, sessionmaker
 import os
-import shutil
-import uuid
+from uuid import uuid4
+from urllib.parse import quote
 
+import httpx
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="NOVA")
-
-
-# =========================
-# CORS
-# =========================
-
+app = FastAPI(title="NOVA API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "apikey"],
 )
 
-
-# =========================
-# Database
-# =========================
-
-DATABASE_URL = "sqlite:///./nova.db"
-
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}
-)
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-Base = declarative_base()
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+ALLOWED_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
 
 
-# =========================
-# User Model
-# =========================
-
-class UserDB(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, nullable=False)
-    password = Column(String, nullable=False)
+def config_headers(token: str | None = None) -> dict[str, str]:
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise HTTPException(status_code=500, detail="Supabase 환경변수가 설정되지 않았습니다.")
+    headers = {"apikey": SUPABASE_ANON_KEY}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
-# =========================
-# Video Model
-# =========================
-
-class VideoDB(Base):
-    __tablename__ = "videos"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    filename = Column(String, unique=True, nullable=False)
+def raise_upstream(response: httpx.Response) -> None:
+    if response.is_error:
+        try:
+            detail = response.json().get("message") or response.json().get("error") or response.text
+        except Exception:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=str(detail))
 
 
-Base.metadata.create_all(bind=engine)
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
-# =========================
-# Request Model
-# =========================
-
-class User(BaseModel):
-    username: str
-    password: str
-
-
-# =========================
-# Video Storage
-# =========================
-
-VIDEO_DIR = "../storage/videos"
-
-os.makedirs(VIDEO_DIR, exist_ok=True)
-
-
-ALLOWED_EXTENSIONS = {
-    ".mp4",
-    ".webm",
-    ".mov",
-    ".mkv",
-    ".avi"
-}
-
-
-# =========================
-# Home
-# =========================
-
-@app.get("/")
-def home():
-    return {
-        "name": "NOVA",
-        "status": "online"
-    }
-
-
-# =========================
-# Register
-# =========================
-
-@app.post("/register")
-def register(user: User):
-
-    db = SessionLocal()
-
-    try:
-
-        existing_user = (
-            db.query(UserDB)
-            .filter(UserDB.username == user.username)
-            .first()
+@app.get("/api/videos")
+async def list_videos():
+    headers = config_headers()
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers=headers,
+            params={"select": "id,title,storage_path,created_at", "order": "created_at.desc"},
         )
+    raise_upstream(response)
+    videos = response.json()
+    for video in videos:
+        path = quote(video["storage_path"], safe="/")
+        video["url"] = f"{SUPABASE_URL}/storage/v1/object/public/videos/{path}"
+    return videos
 
-        if existing_user:
-            raise HTTPException(
-                status_code=400,
-                detail="이미 존재하는 아이디입니다."
-            )
 
-        new_user = UserDB(
-            username=user.username,
-            password=user.password
+@app.get("/api/videos/{video_id}")
+async def get_video(video_id: str):
+    headers = config_headers()
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers=headers,
+            params={"select": "id,title,storage_path", "id": f"eq.{video_id}", "limit": "1"},
         )
-
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-
-        return {
-            "message": "회원가입 성공",
-            "username": new_user.username
-        }
-
-    finally:
-        db.close()
+    raise_upstream(response)
+    rows = response.json()
+    if not rows:
+        raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
+    video = rows[0]
+    path = quote(video["storage_path"], safe="/")
+    video["url"] = f"{SUPABASE_URL}/storage/v1/object/public/videos/{path}"
+    return video
 
 
-# =========================
-# Login
-# =========================
-
-@app.post("/login")
-def login(user: User):
-
-    db = SessionLocal()
-
-    try:
-
-        found_user = (
-            db.query(UserDB)
-            .filter(UserDB.username == user.username)
-            .first()
-        )
-
-        if not found_user:
-            raise HTTPException(
-                status_code=401,
-                detail="아이디 또는 비밀번호가 틀렸습니다."
-            )
-
-        if found_user.password != user.password:
-            raise HTTPException(
-                status_code=401,
-                detail="아이디 또는 비밀번호가 틀렸습니다."
-            )
-
-        return {
-            "message": "로그인 성공",
-            "username": found_user.username,
-            "user_id": found_user.id
-        }
-
-    finally:
-        db.close()
-
-
-# =========================
-# Upload Video
-# =========================
-
-@app.post("/upload")
-def upload_video(
+@app.post("/api/upload")
+async def upload_video(
     title: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
 ):
-
     title = title.strip()
-
     if not title:
-        raise HTTPException(
-            status_code=400,
-            detail="영상 제목을 입력하세요."
-        )
+        raise HTTPException(status_code=400, detail="영상 제목을 입력하세요.")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="로그인 후 업로드하세요.")
 
-    extension = os.path.splitext(
-        file.filename
-    )[1].lower()
+    token = authorization.split(" ", 1)[1]
+    headers = config_headers(token)
+    user_headers = {**headers, "Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=60) as client:
+        user_response = await client.get(f"{SUPABASE_URL}/auth/v1/user", headers=user_headers)
+        raise_upstream(user_response)
+        user_id = user_response.json().get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="로그인 정보를 확인할 수 없습니다.")
 
-    if extension not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail="지원하지 않는 영상 형식입니다."
-        )
+        filename = file.filename or "video.mp4"
+        extension = os.path.splitext(filename)[1].lower()
+        if extension not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="지원하지 않는 영상 형식입니다.")
 
-    video_id = str(uuid.uuid4())
-
-    filename = video_id + extension
-
-    file_path = os.path.join(
-        VIDEO_DIR,
-        filename
-    )
-
-    with open(file_path, "wb") as buffer:
-
-        shutil.copyfileobj(
-            file.file,
-            buffer
-        )
-
-
-    db = SessionLocal()
-
-    try:
-
-        video = VideoDB(
-            title=title,
-            filename=filename
-        )
-
-        db.add(video)
-        db.commit()
-        db.refresh(video)
-
-        return {
-            "message": "영상 업로드 성공",
-            "id": video.id,
-            "title": video.title,
-            "filename": video.filename
+        storage_path = f"{user_id}/{uuid4()}{extension}"
+        encoded_path = quote(storage_path, safe="/")
+        contents = await file.read()
+        upload_headers = {
+            **user_headers,
+            "Content-Type": file.content_type or "application/octet-stream",
+            "x-upsert": "false",
         }
-
-    finally:
-
-        db.close()
-
-
-# =========================
-# Video List
-# =========================
-
-@app.get("/videos")
-def get_videos():
-
-    db = SessionLocal()
-
-    try:
-
-        videos = (
-            db.query(VideoDB)
-            .order_by(VideoDB.id.desc())
-            .all()
+        storage_response = await client.post(
+            f"{SUPABASE_URL}/storage/v1/object/videos/{encoded_path}",
+            headers=upload_headers,
+            content=contents,
         )
+        raise_upstream(storage_response)
 
-        return [
-            {
-                "id": video.id,
-                "title": video.title,
-                "filename": video.filename,
-                "url": f"http://127.0.0.1:8000/videos/{video.filename}"
-            }
-            for video in videos
-        ]
-
-    finally:
-
-        db.close()
-
-
-# =========================
-# Play Video
-# =========================
-
-@app.get("/videos/{filename}")
-def play_video(filename: str):
-
-    file_path = os.path.join(
-        VIDEO_DIR,
-        filename
-    )
-
-    if not os.path.isfile(file_path):
-        raise HTTPException(
-            status_code=404,
-            detail="영상을 찾을 수 없습니다."
+        row_response = await client.post(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers={**user_headers, "Content-Type": "application/json", "Prefer": "return=minimal"},
+            json={"title": title, "storage_path": storage_path, "user_id": user_id},
         )
+        if row_response.is_error:
+            await client.delete(
+                f"{SUPABASE_URL}/storage/v1/object/videos/{encoded_path}",
+                headers=user_headers,
+            )
+        raise_upstream(row_response)
 
-    extension = os.path.splitext(
-        filename
-    )[1].lower()
-
-    media_types = {
-        ".mp4": "video/mp4",
-        ".webm": "video/webm",
-        ".mov": "video/quicktime",
-        ".mkv": "video/x-matroska",
-        ".avi": "video/x-msvideo"
-    }
-
-    return FileResponse(
-        file_path,
-        media_type=media_types.get(
-            extension,
-            "video/mp4"
-        )
-    )
+    return {"message": "영상 업로드 성공", "title": title}
