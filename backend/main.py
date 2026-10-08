@@ -59,8 +59,6 @@ async def authenticated_user(authorization: str | None) -> tuple[str, str]:
 
 
 def require_admin_config() -> None:
-    if not ADMIN_USER_IDS:
-        raise HTTPException(status_code=503, detail="관리자 계정이 아직 설정되지 않았습니다.")
     if not SUPABASE_SERVICE_ROLE_KEY:
         raise HTTPException(status_code=503, detail="관리자용 Supabase 키가 아직 설정되지 않았습니다.")
 
@@ -192,7 +190,7 @@ async def admin_add_admin(
         target = next((user for user in users if (user.get("email") or "").lower() == email), None)
         if not target:
             raise HTTPException(status_code=404, detail="가입된 계정을 찾을 수 없습니다. 먼저 회원가입을 해주세요.")
-        if target["id"] in ADMIN_USER_IDS or target.get("app_metadata", {}).get("nova_role") == "admin":
+        if target.get("app_metadata", {}).get("nova_role") == "admin":
             return {"message": "이미 관리자입니다."}
         metadata = {**target.get("app_metadata", {}), "nova_role": "admin"}
         response = await client.put(
@@ -214,6 +212,12 @@ async def admin_remove_admin(user_id: str, authorization: str | None = Header(de
         target = next((user for user in users if user.get("id") == user_id), None)
         if not target or target.get("app_metadata", {}).get("nova_role") != "admin":
             raise HTTPException(status_code=404, detail="관리자를 찾을 수 없습니다.")
+        active_admin_ids = {
+            user["id"] for user in users
+            if user["id"] in ADMIN_USER_IDS or user.get("app_metadata", {}).get("nova_role") == "admin"
+        }
+        if len(active_admin_ids) <= 1:
+            raise HTTPException(status_code=400, detail="마지막 관리자는 해제할 수 없습니다. 먼저 다른 계정을 관리자로 추가하세요.")
         metadata = dict(target.get("app_metadata", {}))
         metadata.pop("nova_role", None)
         response = await client.put(
