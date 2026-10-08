@@ -14,10 +14,8 @@
         .admin-video button { flex: 0 0 auto; padding: 10px 16px; border: 0; border-radius: 5px; background: #a83232; color: white; cursor: pointer; }
         .admin-video button:disabled { opacity: .6; cursor: wait; }
         .admin-managers { margin: 0 0 36px; padding: 20px; background: #181818; border: 1px solid #333; border-radius: 8px; }
-        .admin-managers form { display: flex; gap: 10px; }
-        .admin-managers input { flex: 1; min-width: 0; padding: 11px; background: #222; color: white; border: 1px solid #444; border-radius: 5px; }
-        .admin-managers button { padding: 10px 16px; color: white; background: #333; border: 0; border-radius: 5px; cursor: pointer; }
         .admin-managers > p:last-child { color: #aaa; }
+        .admin-managers a { color: #9ac5ff; }
         @media (max-width: 600px) { .admin-video { align-items: flex-start; flex-direction: column; } }
     </style>
 </head>
@@ -29,10 +27,8 @@
 <main class="admin-container">
     <section class="admin-managers">
         <h2>관리자 계정 관리</h2>
-        <form id="adminForm">
-            <input id="adminEmail" type="email" placeholder="추가할 계정 이메일" required>
-            <button type="submit">관리자 추가</button>
-        </form>
+        <p>새 관리자는 백엔드 API 문서에서 추가하세요: <a id="docsLink" href="#" target="_blank" rel="noopener">API 문서 열기</a></p>
+        <p><code>POST /api/admin/admins</code> 요청 본문: <code>{"email":"가입한계정@example.com"}</code></p>
         <p id="adminStatus" aria-live="polite">관리자 목록을 불러오는 중...</p>
         <div id="adminList" class="admin-list"></div>
         <p>추가할 계정은 먼저 NOVA에 회원가입되어 있어야 합니다.</p>
@@ -49,8 +45,8 @@ const status = document.getElementById("status");
 const videoList = document.getElementById("videoList");
 const adminStatus = document.getElementById("adminStatus");
 const adminList = document.getElementById("adminList");
-const adminForm = document.getElementById("adminForm");
 const authLink = document.getElementById("authLink");
+document.getElementById("docsLink").href = `${API_BASE_URL.replace(/\/$/, "")}/docs`;
 let accessToken = null;
 let currentUserId = null;
 
@@ -144,25 +140,6 @@ async function loadAdmins() {
         adminStatus.textContent = `관리자 목록을 불러오지 못했습니다: ${error.message}`;
     }
 }
-
-adminForm.addEventListener("submit", async event => {
-    event.preventDefault();
-    const emailInput = document.getElementById("adminEmail");
-    const email = emailInput.value.trim();
-    adminStatus.textContent = "관리자를 추가하는 중...";
-    try {
-        const result = await apiRequest(`${API_BASE_URL}/api/admin/admins`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email })
-        });
-        adminStatus.textContent = result.message;
-        emailInput.value = "";
-        await loadAdmins();
-    } catch (error) {
-        adminStatus.textContent = `추가 실패: ${error.message}`;
-    }
-});
 
 async function removeAdmin(admin, button) {
     if (!confirm(`${admin.email} 계정의 관리자 권한을 해제할까요?`)) return;
