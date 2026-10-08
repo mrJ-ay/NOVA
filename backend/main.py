@@ -152,6 +152,7 @@ async def api_login(nickname: str = Body(...), password: str = Body(...)):
     session = response.json()
     return {
         "access_token": session.get("access_token"),
+        "refresh_token": session.get("refresh_token"),
         "token_type": session.get("token_type", "bearer"),
         "expires_in": session.get("expires_in"),
         "user": {

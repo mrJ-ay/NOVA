@@ -9,36 +9,72 @@
 <body>
 <div class="login-container">
     <h1>NOVA</h1>
-    <h2>로그인 / 회원가입</h2>
-    <input id="nickname" type="text" placeholder="닉네임 (회원가입 시 입력)" autocomplete="nickname" maxlength="40">
-    <input id="email" type="email" placeholder="이메일" autocomplete="email">
+    <h2 id="formTitle">로그인</h2>
+    <input id="nickname" type="text" placeholder="닉네임" autocomplete="nickname" maxlength="40">
+    <div id="signupFields" hidden>
+        <input id="email" type="email" placeholder="회원가입용 이메일" autocomplete="email">
+    </div>
     <input id="password" type="password" placeholder="비밀번호" autocomplete="current-password">
     <button id="loginButton" type="button">로그인</button>
-    <button id="registerButton" type="button">회원가입</button>
+    <button id="registerModeButton" type="button">회원가입</button>
+    <button id="registerButton" type="button" hidden>가입하기</button>
+    <button id="loginModeButton" type="button" hidden>로그인으로 돌아가기</button>
     <p id="message" aria-live="polite"></p>
 </div>
 <script type="module">
 import { supabase } from "./supabase.js";
+import { API_BASE_URL } from "./api-config.js";
 
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const nicknameInput = document.getElementById("nickname");
 const message = document.getElementById("message");
+const signupFields = document.getElementById("signupFields");
+const formTitle = document.getElementById("formTitle");
+const loginButton = document.getElementById("loginButton");
+const registerModeButton = document.getElementById("registerModeButton");
+const registerButton = document.getElementById("registerButton");
+const loginModeButton = document.getElementById("loginModeButton");
 
-document.getElementById("loginButton").addEventListener("click", login);
-document.getElementById("registerButton").addEventListener("click", register);
+loginButton.addEventListener("click", login);
+registerModeButton.addEventListener("click", () => setMode(true));
+registerButton.addEventListener("click", register);
+loginModeButton.addEventListener("click", () => setMode(false));
+
+function setMode(registering) {
+    signupFields.hidden = !registering;
+    loginButton.hidden = registering;
+    registerModeButton.hidden = registering;
+    registerButton.hidden = !registering;
+    loginModeButton.hidden = !registering;
+    formTitle.textContent = registering ? "회원가입" : "로그인";
+    document.getElementById("password").autocomplete = registering ? "new-password" : "current-password";
+    message.textContent = "";
+}
 
 async function login() {
-    const email = emailInput.value.trim();
+    const nickname = nicknameInput.value.trim();
     const password = passwordInput.value;
-    if (!email || !password) {
-        message.textContent = "이메일과 비밀번호를 입력하세요.";
+    if (!nickname || !password) {
+        message.textContent = "닉네임과 비밀번호를 입력하세요.";
         return;
     }
 
     message.textContent = "로그인 중...";
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nickname, password })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "로그인 정보를 확인하세요.");
+        const { error } = await supabase.auth.setSession({
+            access_token: result.access_token,
+            refresh_token: result.refresh_token
+        });
+        if (error) throw error;
+    } catch (error) {
         message.textContent = `로그인 실패: ${error.message}`;
         return;
     }
@@ -75,6 +111,8 @@ async function register() {
         message.textContent = "회원가입 완료! 이메일 확인 링크를 누른 뒤 로그인하세요.";
     }
 }
+
+setMode(false);
 </script>
 </body>
 </html>
