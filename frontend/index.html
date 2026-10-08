@@ -13,7 +13,7 @@
         <input id="searchInput" type="search" placeholder="영상 제목 검색" aria-label="영상 제목 검색">
         <button type="submit">검색</button>
     </form>
-    <div class="nav-buttons"><a href="login.html">로그인</a><a href="upload.html">업로드</a></div>
+    <div class="nav-buttons"><a id="authLink" href="login.html">로그인</a><a href="upload.html">업로드</a></div>
 </header>
 <main class="container">
     <h1 id="pageTitle">최신 영상</h1>
@@ -21,11 +21,43 @@
 </main>
 <script type="module">
 import { API_BASE_URL } from "./api-config.js";
+import { supabase } from "./supabase.js";
 const videoGrid = document.getElementById("videoGrid");
 const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
 const pageTitle = document.getElementById("pageTitle");
 let allVideos = [];
+
+const authLink = document.getElementById("authLink");
+async function logout(event) {
+    event.preventDefault();
+    authLink.textContent = "로그아웃 중...";
+    authLink.onclick = null;
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        console.error("로그아웃 실패:", error);
+        authLink.textContent = "로그아웃";
+        authLink.onclick = logout;
+        return;
+    }
+    updateAuthLink(null);
+}
+
+function updateAuthLink(session) {
+    if (session) {
+        authLink.textContent = "로그아웃";
+        authLink.href = "#logout";
+        authLink.onclick = logout;
+    } else {
+        authLink.textContent = "로그인";
+        authLink.href = "login.html";
+        authLink.onclick = null;
+    }
+}
+
+const { data: { session } } = await supabase.auth.getSession();
+updateAuthLink(session);
+supabase.auth.onAuthStateChange((_event, newSession) => updateAuthLink(newSession));
 
 function renderVideos(query = "") {
     const normalizedQuery = query.trim().toLocaleLowerCase();
