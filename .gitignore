@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.py[cod]
+backend/nova.db
+storage/videos/*
+!storage/videos/.gitkeep

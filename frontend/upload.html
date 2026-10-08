@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>NOVA 업로드</title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
+</head>
+
+
+<body>
+
+
+<header class="navbar">
+
+    <div class="logo">
+        NOVA
+    </div>
+
+    <div class="nav-buttons">
+
+        <a href="index.html">
+            홈
+        </a>
+
+    </div>
+
+</header>
+
+
+
+<main class="upload-container">
+
+    <h1>
+        영상 업로드
+    </h1>
+
+
+    <input
+        id="title"
+        type="text"
+        placeholder="영상 제목"
+    >
+
+
+    <input
+        id="videoFile"
+        type="file"
+        accept="video/*"
+    >
+
+
+    <button onclick="uploadVideo()">
+        업로드
+    </button>
+
+
+    <p id="message"></p>
+
+</main>
+
+
+
+<script>
+
+const API =
+    "http://127.0.0.1:8000";
+
+
+async function uploadVideo() {
+
+    const title =
+        document.getElementById("title").value.trim();
+
+    const fileInput =
+        document.getElementById("videoFile");
+
+    const message =
+        document.getElementById("message");
+
+
+    if (!title) {
+
+        message.textContent =
+            "영상 제목을 입력하세요.";
+
+        return;
+    }
+
+
+    if (!fileInput.files.length) {
+
+        message.textContent =
+            "영상을 선택하세요.";
+
+        return;
+    }
+
+
+    const formData =
+        new FormData();
+
+
+    formData.append(
+        "title",
+        title
+    );
+
+
+    formData.append(
+        "file",
+        fileInput.files[0]
+    );
+
+
+    message.textContent =
+        "업로드 중...";
+
+
+    try {
+
+        const response =
+            await fetch(
+                `${API}/upload`,
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (response.ok) {
+
+            message.textContent =
+                "업로드 성공!";
+
+
+            document.getElementById(
+                "title"
+            ).value = "";
+
+            fileInput.value = "";
+
+        } else {
+
+            message.textContent =
+                data.detail ||
+                "업로드 실패";
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        message.textContent =
+            "서버에 연결할 수 없습니다.";
+
+    }
+
+}
+
+</script>
+
+
+</body>
+
+</html>

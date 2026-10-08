@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOVA 로그인</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="login-container">
+
+    <h1>NOVA</h1>
+    <h2>로그인</h2>
+
+    <input id="username" type="text" placeholder="아이디">
+    <input id="password" type="password" placeholder="비밀번호">
+
+    <button onclick="login()">로그인</button>
+    <button onclick="register()">회원가입</button>
+
+    <p id="message"></p>
+
+</div>
+
+<script>
+
+const API = "http://127.0.0.1:8000";
+
+
+async function register() {
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
+    if (!username || !password) {
+        document.getElementById("message").textContent =
+            "아이디와 비밀번호를 입력하세요.";
+        return;
+    }
+
+    try {
+
+        const response = await fetch(`${API}/register`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                username: username,
+                password: password
+            })
+        });
+
+        const data = await response.json();
+
+        document.getElementById("message").textContent =
+            data.message || data.detail;
+
+    } catch (error) {
+
+        document.getElementById("message").textContent =
+            "서버에 연결할 수 없습니다.";
+
+    }
+}
+
+
+async function login() {
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
+    if (!username || !password) {
+        document.getElementById("message").textContent =
+            "아이디와 비밀번호를 입력하세요.";
+        return;
+    }
+
+    try {
+
+        const response = await fetch(`${API}/login`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                username: username,
+                password: password
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+
+            localStorage.setItem("nova_user", data.username);
+            localStorage.setItem("nova_user_id", data.user_id);
+
+            window.location.href = "index.html";
+
+        } else {
+
+            document.getElementById("message").textContent =
+                data.detail;
+
+        }
+
+    } catch (error) {
+
+        document.getElementById("message").textContent =
+            "서버에 연결할 수 없습니다.";
+
+    }
+}
+
+</script>
+
+</body>
+</html>

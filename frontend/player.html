@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>NOVA 플레이어</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header class="navbar">
+
+    <div class="logo">
+        NOVA
+    </div>
+
+    <div class="nav-buttons">
+        <a href="index.html">홈</a>
+        <a href="upload.html">업로드</a>
+    </div>
+
+</header>
+
+
+<main class="player-page">
+
+    <div class="player">
+
+        <video
+            id="player"
+            controls
+            playsinline
+        ></video>
+
+    </div>
+
+    <h1 id="videoTitle">
+        영상을 불러오는 중...
+    </h1>
+
+    <p id="videoInfo">
+        NOVA
+    </p>
+
+</main>
+
+
+<script>
+
+const API = "http://127.0.0.1:8000";
+
+const params = new URLSearchParams(
+    window.location.search
+);
+
+const filename = params.get("video");
+const title = params.get("title");
+
+
+const player = document.getElementById("player");
+const videoTitle = document.getElementById("videoTitle");
+
+
+if (filename) {
+
+    player.src =
+        `${API}/videos/${encodeURIComponent(filename)}`;
+
+}
+
+
+if (title) {
+
+    videoTitle.textContent =
+        title;
+
+}
+
+
+player.addEventListener("error", () => {
+
+    videoTitle.textContent =
+        "영상을 재생할 수 없습니다.";
+
+});
+
+
+</script>
+
+</body>
+
+</html>

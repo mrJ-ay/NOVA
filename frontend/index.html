@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOVA</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="navbar">
+    <div class="logo">NOVA</div>
+    <form class="search" id="searchForm" role="search">
+        <input id="searchInput" type="search" placeholder="영상 제목 검색" aria-label="영상 제목 검색">
+        <button type="submit">검색</button>
+    </form>
+    <div class="nav-buttons">
+        <a href="login.html">로그인</a>
+        <a href="upload.html">업로드</a>
+    </div>
+</header>
+<main class="container">
+    <h1 id="pageTitle">최신 영상</h1>
+    <section id="videoGrid" class="video-grid" aria-live="polite">
+        <p>영상을 불러오는 중...</p>
+    </section>
+</main>
+<script>
+const API = "http://127.0.0.1:8000";
+const videoGrid = document.getElementById("videoGrid");
+const searchForm = document.getElementById("searchForm");
+const searchInput = document.getElementById("searchInput");
+const pageTitle = document.getElementById("pageTitle");
+let allVideos = [];
+
+function renderVideos(query = "") {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const filteredVideos = allVideos.filter((video) =>
+        (video.title || "").toLocaleLowerCase().includes(normalizedQuery)
+    );
+
+    videoGrid.replaceChildren();
+    pageTitle.textContent = normalizedQuery ? `검색 결과 (${filteredVideos.length})` : "최신 영상";
+
+    if (filteredVideos.length === 0) {
+        const message = document.createElement("p");
+        message.textContent = normalizedQuery
+            ? "검색 결과가 없습니다. 다른 제목으로 검색해 보세요."
+            : "아직 업로드된 영상이 없습니다.";
+        videoGrid.appendChild(message);
+        return;
+    }
+
+    filteredVideos.forEach((video) => {
+        const card = document.createElement("article");
+        card.className = "video-card";
+
+        const thumbnail = document.createElement("video");
+        thumbnail.className = "thumbnail-video";
+        thumbnail.src = video.url;
+        thumbnail.muted = true;
+        thumbnail.preload = "metadata";
+        thumbnail.setAttribute("aria-label", `${video.title} 미리보기`);
+
+        const title = document.createElement("h2");
+        title.textContent = video.title;
+
+        const channel = document.createElement("p");
+        channel.textContent = "NOVA";
+
+        card.append(thumbnail, title, channel);
+        card.addEventListener("click", () => {
+            window.location.href = `player.html?video=${encodeURIComponent(video.filename)}&title=${encodeURIComponent(video.title)}`;
+        });
+        videoGrid.appendChild(card);
+    });
+}
+
+async function loadVideos() {
+    try {
+        const response = await fetch(`${API}/videos`);
+        if (!response.ok) throw new Error(`영상 목록 요청 실패: ${response.status}`);
+        allVideos = await response.json();
+        renderVideos(searchInput.value);
+    } catch (error) {
+        console.error(error);
+        videoGrid.replaceChildren();
+        const message = document.createElement("p");
+        message.textContent = "서버에 연결할 수 없습니다.";
+        videoGrid.appendChild(message);
+    }
+}
+
+searchForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    renderVideos(searchInput.value);
+});
+searchInput.addEventListener("input", () => renderVideos(searchInput.value));
+loadVideos();
+</script>
+</body>
+</html>
