@@ -21,7 +21,6 @@
 </main>
 <script type="module">
 import { API_BASE_URL } from "./api-config.js";
-import { supabase } from "./supabase.js";
 const videoGrid = document.getElementById("videoGrid");
 const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
@@ -33,13 +32,8 @@ async function logout(event) {
     event.preventDefault();
     authLink.textContent = "로그아웃 중...";
     authLink.onclick = null;
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-        console.error("로그아웃 실패:", error);
-        authLink.textContent = "로그아웃";
-        authLink.onclick = logout;
-        return;
-    }
+    localStorage.removeItem("nova_access_token");
+    localStorage.removeItem("nova_user");
     updateAuthLink(null);
 }
 
@@ -55,9 +49,7 @@ function updateAuthLink(session) {
     }
 }
 
-const { data: { session } } = await supabase.auth.getSession();
-updateAuthLink(session);
-supabase.auth.onAuthStateChange((_event, newSession) => updateAuthLink(newSession));
+updateAuthLink(localStorage.getItem("nova_access_token"));
 
 function renderVideos(query = "") {
     const normalizedQuery = query.trim().toLocaleLowerCase();

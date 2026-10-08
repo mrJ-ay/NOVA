@@ -16,7 +16,6 @@
     <p id="message" aria-live="polite"></p>
 </main>
 <script type="module">
-import { supabase } from "./supabase.js";
 import { API_BASE_URL } from "./api-config.js";
 const authLink = document.getElementById("authLink");
 const titleInput = document.getElementById("title");
@@ -41,27 +40,20 @@ async function logout(event) {
     event.preventDefault();
     authLink.textContent = "로그아웃 중...";
     authLink.onclick = null;
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-        console.error("로그아웃 실패:", error);
-        authLink.textContent = "로그아웃";
-        authLink.onclick = logout;
-        return;
-    }
+    localStorage.removeItem("nova_access_token");
+    localStorage.removeItem("nova_user");
     updateAuthLink(null);
 }
 
-const { data: { session } } = await supabase.auth.getSession();
-updateAuthLink(session);
-supabase.auth.onAuthStateChange((_event, newSession) => updateAuthLink(newSession));
+updateAuthLink(localStorage.getItem("nova_access_token"));
 
 async function uploadVideo() {
     const title = titleInput.value.trim();
     const file = fileInput.files[0];
     if (!title) { message.textContent = "영상 제목을 입력하세요."; return; }
     if (!file) { message.textContent = "영상을 선택하세요."; return; }
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { message.textContent = "로그인 후 업로드하세요."; return; }
+    const accessToken = localStorage.getItem("nova_access_token");
+    if (!accessToken) { message.textContent = "로그인 후 업로드하세요."; return; }
     button.disabled = true;
     message.textContent = "영상 업로드 중...";
     try {
@@ -70,7 +62,7 @@ async function uploadVideo() {
         form.append("file", file);
         const response = await fetch(`${API_BASE_URL}/api/upload`, {
             method: "POST",
-            headers: { Authorization: `Bearer ${session.access_token}` },
+            headers: { Authorization: `Bearer ${accessToken}` },
             body: form
         });
         const result = await response.json();

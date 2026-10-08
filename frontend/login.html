@@ -11,9 +11,6 @@
     <h1>NOVA</h1>
     <h2 id="formTitle">로그인</h2>
     <input id="nickname" type="text" placeholder="닉네임" autocomplete="nickname" maxlength="40">
-    <div id="signupFields" hidden>
-        <input id="email" type="email" placeholder="회원가입용 이메일" autocomplete="email">
-    </div>
     <input id="password" type="password" placeholder="비밀번호" autocomplete="current-password">
     <button id="loginButton" type="button">로그인</button>
     <button id="registerModeButton" type="button">회원가입</button>
@@ -22,14 +19,11 @@
     <p id="message" aria-live="polite"></p>
 </div>
 <script type="module">
-import { supabase } from "./supabase.js";
 import { API_BASE_URL } from "./api-config.js";
 
-const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const nicknameInput = document.getElementById("nickname");
 const message = document.getElementById("message");
-const signupFields = document.getElementById("signupFields");
 const formTitle = document.getElementById("formTitle");
 const loginButton = document.getElementById("loginButton");
 const registerModeButton = document.getElementById("registerModeButton");
@@ -42,7 +36,6 @@ registerButton.addEventListener("click", register);
 loginModeButton.addEventListener("click", () => setMode(false));
 
 function setMode(registering) {
-    signupFields.hidden = !registering;
     loginButton.hidden = registering;
     registerModeButton.hidden = registering;
     registerButton.hidden = !registering;
@@ -69,11 +62,8 @@ async function login() {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.detail || "로그인 정보를 확인하세요.");
-        const { error } = await supabase.auth.setSession({
-            access_token: result.access_token,
-            refresh_token: result.refresh_token
-        });
-        if (error) throw error;
+        localStorage.setItem("nova_access_token", result.access_token);
+        localStorage.setItem("nova_user", JSON.stringify(result.user));
     } catch (error) {
         message.textContent = `로그인 실패: ${error.message}`;
         return;
@@ -83,10 +73,9 @@ async function login() {
 
 async function register() {
     const nickname = nicknameInput.value.trim();
-    const email = emailInput.value.trim();
     const password = passwordInput.value;
-    if (!nickname || !email || !password) {
-        message.textContent = "닉네임, 이메일, 비밀번호를 입력하세요.";
+    if (!nickname || !password) {
+        message.textContent = "닉네임과 비밀번호를 입력하세요.";
         return;
     }
     if (nickname.length > 40) {
@@ -99,16 +88,20 @@ async function register() {
     }
 
     message.textContent = "회원가입 중...";
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { nickname }, emailRedirectTo: window.location.origin } });
-    if (error) {
-        message.textContent = `회원가입 실패: ${error.message}`;
-        return;
-    }
-    if (data.session) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nickname, password })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "회원가입에 실패했습니다.");
+        localStorage.setItem("nova_access_token", result.access_token);
+        localStorage.setItem("nova_user", JSON.stringify(result.user));
         message.textContent = "회원가입과 로그인이 완료됐습니다.";
         window.location.href = "index.html";
-    } else {
-        message.textContent = "회원가입 완료! 이메일 확인 링크를 누른 뒤 로그인하세요.";
+    } catch (error) {
+        message.textContent = `회원가입 실패: ${error.message}`;
     }
 }
 

@@ -27,7 +27,7 @@
 <main class="admin-container">
     <section class="admin-managers">
         <h2>관리자 계정 관리</h2>
-        <p>Swagger에서 <code>POST /api/auth/login</code>에 <code>{"nickname":"닉네임","password":"비밀번호"}</code>를 보내 토큰을 발급받으세요. 그런 다음 <code>POST /api/admin/admins</code>에 <code>{"nickname":"대상 닉네임","access_token":"발급된 토큰"}</code>을 보내면 토큰 주인을 관리자로 등록합니다.</p>
+        <p>회원가입과 로그인은 이메일 없이 닉네임·비밀번호를 사용합니다. Swagger에서 <code>POST /api/auth/login</code>에 <code>{"nickname":"닉네임","password":"비밀번호"}</code>를 보내 토큰을 발급받으세요. 그런 다음 <code>POST /api/admin/admins</code>에 <code>{"nickname":"대상 닉네임","access_token":"발급된 토큰"}</code>을 보내면 토큰 주인을 관리자로 등록합니다.</p>
         <p id="adminStatus" aria-live="polite">관리자 목록을 불러오는 중...</p>
         <div id="adminList" class="admin-list"></div>
         <p>추가할 계정은 먼저 NOVA에 회원가입되어 있어야 합니다.</p>
@@ -37,7 +37,6 @@
     <section id="videoList" class="admin-list" aria-live="polite"></section>
 </main>
 <script type="module">
-import { supabase } from "./supabase.js";
 import { API_BASE_URL } from "./api-config.js";
 
 const status = document.getElementById("status");
@@ -45,8 +44,7 @@ const videoList = document.getElementById("videoList");
 const adminStatus = document.getElementById("adminStatus");
 const adminList = document.getElementById("adminList");
 const authLink = document.getElementById("authLink");
-document.getElementById("docsLink").href = `${API_BASE_URL.replace(/\/$/, "")}/docs`;
-let accessToken = null;
+let accessToken = localStorage.getItem("nova_access_token");
 let currentUserId = null;
 
 function updateAuthLink(session) {
@@ -55,7 +53,8 @@ function updateAuthLink(session) {
         authLink.href = "#logout";
         authLink.onclick = async event => {
             event.preventDefault();
-            await supabase.auth.signOut();
+            localStorage.removeItem("nova_access_token");
+            localStorage.removeItem("nova_user");
             location.href = "index.html";
         };
     } else {
@@ -89,7 +88,7 @@ function renderVideos(videos) {
         const title = document.createElement("h2");
         title.textContent = video.title || "제목 없음";
         const meta = document.createElement("p");
-        meta.textContent = `ID: ${video.id} · 업로더: ${video.user_id || "정보 없음"}`;
+        meta.textContent = `ID: ${video.id} · 업로더: ${video.uploader_name || "정보 없음"}`;
         details.append(title, meta);
         const remove = document.createElement("button");
         remove.type = "button";
@@ -120,11 +119,11 @@ async function loadAdmins() {
             const row = document.createElement("article");
             row.className = "admin-video";
             const details = document.createElement("div");
-            const email = document.createElement("h2");
-            email.textContent = admin.email;
+            const nickname = document.createElement("h2");
+            nickname.textContent = admin.nickname;
             const id = document.createElement("p");
             id.textContent = admin.id;
-            details.append(email, id);
+            details.append(nickname, id);
             row.appendChild(details);
             if (admin.id !== currentUserId) {
                 const remove = document.createElement("button");
@@ -141,7 +140,7 @@ async function loadAdmins() {
 }
 
 async function removeAdmin(admin, button) {
-    if (!confirm(`${admin.email} 계정의 관리자 권한을 해제할까요?`)) return;
+    if (!confirm(`${admin.nickname} 계정의 관리자 권한을 해제할까요?`)) return;
     button.disabled = true;
     try {
         const result = await apiRequest(`${API_BASE_URL}/api/admin/admins/${encodeURIComponent(admin.id)}`, { method: "DELETE" });
@@ -167,16 +166,24 @@ async function deleteVideo(video, button) {
     }
 }
 
-const { data: { session } } = await supabase.auth.getSession();
-updateAuthLink(session);
-if (!session) {
+updateAuthLink(accessToken);
+if (!accessToken) {
     status.textContent = "관리자 로그인이 필요합니다. 로그인 후 다시 접속하세요.";
     adminStatus.textContent = "관리자 로그인 후 이용할 수 있습니다.";
 } else {
-    accessToken = session.access_token;
-    const { data: { user } } = await supabase.auth.getUser();
-    currentUserId = user?.id || null;
-    await Promise.all([loadVideos(), loadAdmins()]);
+    try {
+        const user = await apiRequest(`${API_BASE_URL}/api/auth/me`);
+        currentUserId = user.id;
+        if (!user.is_admin) {
+            status.textContent = "관리자 권한이 필요합니다.";
+            adminStatus.textContent = "관리자 권한이 필요합니다.";
+        } else {
+            await Promise.all([loadVideos(), loadAdmins()]);
+        }
+    } catch (error) {
+        status.textContent = error.message;
+        adminStatus.textContent = error.message;
+    }
 }
 </script>
 </body>
