@@ -6,116 +6,68 @@
     <title>NOVA 로그인</title>
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-
 <div class="login-container">
-
     <h1>NOVA</h1>
-    <h2>로그인</h2>
-
-    <input id="username" type="text" placeholder="아이디">
-    <input id="password" type="password" placeholder="비밀번호">
-
-    <button onclick="login()">로그인</button>
-    <button onclick="register()">회원가입</button>
-
-    <p id="message"></p>
-
+    <h2>로그인 / 회원가입</h2>
+    <input id="email" type="email" placeholder="이메일" autocomplete="email">
+    <input id="password" type="password" placeholder="비밀번호" autocomplete="current-password">
+    <button id="loginButton" type="button">로그인</button>
+    <button id="registerButton" type="button">회원가입</button>
+    <p id="message" aria-live="polite"></p>
 </div>
+<script type="module">
+import { supabase } from "./supabase.js";
 
-<script>
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const message = document.getElementById("message");
 
-const API = "http://127.0.0.1:8000";
-
-
-async function register() {
-
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value;
-
-    if (!username || !password) {
-        document.getElementById("message").textContent =
-            "아이디와 비밀번호를 입력하세요.";
-        return;
-    }
-
-    try {
-
-        const response = await fetch(`${API}/register`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                username: username,
-                password: password
-            })
-        });
-
-        const data = await response.json();
-
-        document.getElementById("message").textContent =
-            data.message || data.detail;
-
-    } catch (error) {
-
-        document.getElementById("message").textContent =
-            "서버에 연결할 수 없습니다.";
-
-    }
-}
-
+document.getElementById("loginButton").addEventListener("click", login);
+document.getElementById("registerButton").addEventListener("click", register);
 
 async function login() {
-
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value;
-
-    if (!username || !password) {
-        document.getElementById("message").textContent =
-            "아이디와 비밀번호를 입력하세요.";
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) {
+        message.textContent = "이메일과 비밀번호를 입력하세요.";
         return;
     }
 
-    try {
-
-        const response = await fetch(`${API}/login`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                username: username,
-                password: password
-            })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-
-            localStorage.setItem("nova_user", data.username);
-            localStorage.setItem("nova_user_id", data.user_id);
-
-            window.location.href = "index.html";
-
-        } else {
-
-            document.getElementById("message").textContent =
-                data.detail;
-
-        }
-
-    } catch (error) {
-
-        document.getElementById("message").textContent =
-            "서버에 연결할 수 없습니다.";
-
+    message.textContent = "로그인 중...";
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+        message.textContent = `로그인 실패: ${error.message}`;
+        return;
     }
+    window.location.href = "index.html";
 }
 
-</script>
+async function register() {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) {
+        message.textContent = "이메일과 비밀번호를 입력하세요.";
+        return;
+    }
+    if (password.length < 6) {
+        message.textContent = "비밀번호는 6자 이상 입력하세요.";
+        return;
+    }
 
+    message.textContent = "회원가입 중...";
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+        message.textContent = `회원가입 실패: ${error.message}`;
+        return;
+    }
+    if (data.session) {
+        message.textContent = "회원가입과 로그인이 완료됐습니다.";
+        window.location.href = "index.html";
+    } else {
+        message.textContent = "회원가입 완료! 이메일 확인 링크를 누른 뒤 로그인하세요.";
+    }
+}
+</script>
 </body>
 </html>

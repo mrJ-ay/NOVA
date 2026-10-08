@@ -1,184 +1,107 @@
 <!DOCTYPE html>
 <html lang="ko">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NOVA 업로드</title>
-
-    <link
-        rel="stylesheet"
-        href="style.css"
-    >
-
+    <link rel="stylesheet" href="style.css">
 </head>
-
-
 <body>
-
-
 <header class="navbar">
-
-    <div class="logo">
-        NOVA
-    </div>
-
+    <div class="logo">NOVA</div>
     <div class="nav-buttons">
-
-        <a href="index.html">
-            홈
-        </a>
-
+        <a href="index.html">홈</a>
+        <a href="login.html">로그인</a>
     </div>
-
 </header>
 
-
-
 <main class="upload-container">
-
-    <h1>
-        영상 업로드
-    </h1>
-
-
-    <input
-        id="title"
-        type="text"
-        placeholder="영상 제목"
-    >
-
-
-    <input
-        id="videoFile"
-        type="file"
-        accept="video/*"
-    >
-
-
-    <button onclick="uploadVideo()">
-        업로드
-    </button>
-
-
-    <p id="message"></p>
-
+    <h1>영상 업로드</h1>
+    <input id="title" type="text" placeholder="영상 제목">
+    <input id="videoFile" type="file" accept="video/*">
+    <button id="uploadButton" type="button">업로드</button>
+    <p id="message" aria-live="polite"></p>
 </main>
 
+<script type="module">
+import { supabase } from "./supabase.js";
 
+const titleInput = document.getElementById("title");
+const fileInput = document.getElementById("videoFile");
+const uploadButton = document.getElementById("uploadButton");
+const message = document.getElementById("message");
 
-<script>
-
-const API =
-    "http://127.0.0.1:8000";
-
+uploadButton.addEventListener("click", uploadVideo);
 
 async function uploadVideo() {
-
-    const title =
-        document.getElementById("title").value.trim();
-
-    const fileInput =
-        document.getElementById("videoFile");
-
-    const message =
-        document.getElementById("message");
-
+    const title = titleInput.value.trim();
+    const file = fileInput.files[0];
 
     if (!title) {
-
-        message.textContent =
-            "영상 제목을 입력하세요.";
-
+        message.textContent = "영상 제목을 입력하세요.";
+        return;
+    }
+    if (!file) {
+        message.textContent = "영상을 선택하세요.";
         return;
     }
 
-
-    if (!fileInput.files.length) {
-
-        message.textContent =
-            "영상을 선택하세요.";
-
+    const { data: userResult, error: userError } = await supabase.auth.getUser();
+    const user = userResult?.user;
+    if (userError || !user) {
+        message.textContent = "업로드하려면 먼저 로그인하세요.";
         return;
     }
 
-
-    const formData =
-        new FormData();
-
-
-    formData.append(
-        "title",
-        title
-    );
-
-
-    formData.append(
-        "file",
-        fileInput.files[0]
-    );
-
-
-    message.textContent =
-        "업로드 중...";
-
-
-    try {
-
-        const response =
-            await fetch(
-                `${API}/upload`,
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (response.ok) {
-
-            message.textContent =
-                "업로드 성공!";
-
-
-            document.getElementById(
-                "title"
-            ).value = "";
-
-            fileInput.value = "";
-
-        } else {
-
-            message.textContent =
-                data.detail ||
-                "업로드 실패";
-
-        }
-
-    } catch (error) {
-
-        console.error(error);
-
-        message.textContent =
-            "서버에 연결할 수 없습니다.";
-
+    const extension = file.name.includes(".")
+        ? file.name.split(".").pop().toLowerCase()
+        : "";
+    const allowedExtensions = ["mp4", "webm", "mov", "mkv", "avi"];
+    if (!allowedExtensions.includes(extension)) {
+        message.textContent = "MP4, WebM, MOV, MKV, AVI 파일만 업로드할 수 있습니다.";
+        return;
     }
 
+    const storagePath = `${user.id}/${crypto.randomUUID()}.${extension}`;
+    uploadButton.disabled = true;
+    message.textContent = "영상 업로드 중입니다. 파일 크기에 따라 시간이 걸릴 수 있습니다.";
+
+    const { error: uploadError } = await supabase.storage
+        .from("videos")
+        .upload(storagePath, file, {
+            cacheControl: "3600",
+            contentType: file.type || "application/octet-stream",
+            upsert: false
+        });
+
+    if (uploadError) {
+        console.error(uploadError);
+        message.textContent = `파일 업로드 실패: ${uploadError.message}`;
+        uploadButton.disabled = false;
+        return;
+    }
+
+    const { error: databaseError } = await supabase
+        .from("videos")
+        .insert({ title, storage_path: storagePath, user_id: user.id });
+
+    if (databaseError) {
+        console.error(databaseError);
+        const { error: cleanupError } = await supabase.storage
+            .from("videos")
+            .remove([storagePath]);
+        if (cleanupError) console.error("업로드 파일 정리 실패:", cleanupError);
+
+        message.textContent = `영상 정보 저장 실패: ${databaseError.message}`;
+        uploadButton.disabled = false;
+        return;
+    }
+
+    message.textContent = "업로드가 완료됐습니다.";
+    titleInput.value = "";
+    fileInput.value = "";
+    uploadButton.disabled = false;
 }
-
 </script>
-
-
 </body>
-
 </html>

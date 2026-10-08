@@ -24,8 +24,9 @@
         <p>영상을 불러오는 중...</p>
     </section>
 </main>
-<script>
-const API = "http://127.0.0.1:8000";
+<script type="module">
+import { supabase } from "./supabase.js";
+
 const videoGrid = document.getElementById("videoGrid");
 const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
@@ -39,7 +40,9 @@ function renderVideos(query = "") {
     );
 
     videoGrid.replaceChildren();
-    pageTitle.textContent = normalizedQuery ? `검색 결과 (${filteredVideos.length})` : "최신 영상";
+    pageTitle.textContent = normalizedQuery
+        ? `검색 결과 (${filteredVideos.length})`
+        : "최신 영상";
 
     if (filteredVideos.length === 0) {
         const message = document.createElement("p");
@@ -51,14 +54,19 @@ function renderVideos(query = "") {
     }
 
     filteredVideos.forEach((video) => {
+        const { data } = supabase.storage
+            .from("videos")
+            .getPublicUrl(video.storage_path);
+
         const card = document.createElement("article");
         card.className = "video-card";
 
         const thumbnail = document.createElement("video");
         thumbnail.className = "thumbnail-video";
-        thumbnail.src = video.url;
+        thumbnail.src = data.publicUrl;
         thumbnail.muted = true;
         thumbnail.preload = "metadata";
+        thumbnail.playsInline = true;
         thumbnail.setAttribute("aria-label", `${video.title} 미리보기`);
 
         const title = document.createElement("h2");
@@ -69,25 +77,29 @@ function renderVideos(query = "") {
 
         card.append(thumbnail, title, channel);
         card.addEventListener("click", () => {
-            window.location.href = `player.html?video=${encodeURIComponent(video.filename)}&title=${encodeURIComponent(video.title)}`;
+            window.location.href = `player.html?video=${encodeURIComponent(video.id)}`;
         });
         videoGrid.appendChild(card);
     });
 }
 
 async function loadVideos() {
-    try {
-        const response = await fetch(`${API}/videos`);
-        if (!response.ok) throw new Error(`영상 목록 요청 실패: ${response.status}`);
-        allVideos = await response.json();
-        renderVideos(searchInput.value);
-    } catch (error) {
+    const { data, error } = await supabase
+        .from("videos")
+        .select("id, title, storage_path, created_at")
+        .order("created_at", { ascending: false });
+
+    if (error) {
         console.error(error);
         videoGrid.replaceChildren();
         const message = document.createElement("p");
-        message.textContent = "서버에 연결할 수 없습니다.";
+        message.textContent = `영상 목록을 불러오지 못했습니다: ${error.message}`;
         videoGrid.appendChild(message);
+        return;
     }
+
+    allVideos = data || [];
+    renderVideos(searchInput.value);
 }
 
 searchForm.addEventListener("submit", (event) => {
