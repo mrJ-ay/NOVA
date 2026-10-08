@@ -15,7 +15,7 @@ app = FastAPI(title="NOVA API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "apikey"],
 )
 
@@ -255,6 +255,62 @@ async def admin_list_admins(authorization: str | None = Header(default=None)):
         users = await list_users(client)
     return [{"id": user["id"], "nickname": user["nickname"]}
             for user in users if user.get("is_admin")]
+
+
+@app.get("/api/admin/users")
+async def admin_list_users(authorization: str | None = Header(default=None)):
+    await require_admin(authorization)
+    async with httpx.AsyncClient(timeout=30) as client:
+        return await list_users(client)
+
+
+@app.patch("/api/admin/users/{user_id}")
+async def admin_update_user(
+    user_id: str,
+    is_admin: bool = Body(..., embed=True),
+    authorization: str | None = Header(default=None),
+):
+    current_admin_id = await require_admin(authorization)
+    async with httpx.AsyncClient(timeout=30) as client:
+        users = await list_users(client)
+        target = next((user for user in users if user["id"] == user_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="계정을 찾을 수 없습니다.")
+        if target.get("is_admin") and not is_admin:
+            admin_count = sum(1 for user in users if user.get("is_admin"))
+            if admin_count <= 1:
+                raise HTTPException(status_code=400, detail="마지막 관리자의 권한은 해제할 수 없습니다.")
+            if user_id == current_admin_id:
+                raise HTTPException(status_code=400, detail="현재 로그인한 관리자의 권한은 여기서 해제할 수 없습니다.")
+        response = await client.patch(
+            f"{SUPABASE_URL}/rest/v1/nova_users",
+            headers={**admin_headers(), "Content-Type": "application/json", "Prefer": "return=minimal"},
+            params={"id": f"eq.{user_id}"},
+            json={"is_admin": is_admin},
+        )
+    raise_upstream(response)
+    return {"message": "관리자 권한을 지정했습니다." if is_admin else "관리자 권한을 해제했습니다."}
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, authorization: str | None = Header(default=None)):
+    current_admin_id = await require_admin(authorization)
+    if user_id == current_admin_id:
+        raise HTTPException(status_code=400, detail="현재 로그인한 계정은 삭제할 수 없습니다.")
+    async with httpx.AsyncClient(timeout=30) as client:
+        users = await list_users(client)
+        target = next((user for user in users if user["id"] == user_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="계정을 찾을 수 없습니다.")
+        if target.get("is_admin") and sum(1 for user in users if user.get("is_admin")) <= 1:
+            raise HTTPException(status_code=400, detail="마지막 관리자는 삭제할 수 없습니다.")
+        response = await client.delete(
+            f"{SUPABASE_URL}/rest/v1/nova_users",
+            headers={**admin_headers(), "Prefer": "return=minimal"},
+            params={"id": f"eq.{user_id}"},
+        )
+    raise_upstream(response)
+    return {"message": f"{target['nickname']} 계정을 삭제했습니다. 계정이 올린 영상 파일은 유지됩니다."}
 
 
 @app.post("/api/admin/admins")

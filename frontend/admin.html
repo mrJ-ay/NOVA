@@ -26,9 +26,9 @@
 </header>
 <main class="admin-container">
     <section class="admin-managers">
-        <h2>관리자 계정 관리</h2>
+        <h2>계정 관리</h2>
         <p>회원가입과 로그인은 이메일 없이 닉네임·비밀번호를 사용합니다. Swagger에서 <code>POST /api/auth/login</code>에 <code>{"nickname":"닉네임","password":"비밀번호"}</code>를 보내 토큰을 발급받으세요. 그런 다음 <code>POST /api/admin/admins</code>에 <code>{"nickname":"대상 닉네임","access_token":"발급된 토큰"}</code>을 보내면 토큰 주인을 관리자로 등록합니다.</p>
-        <p id="adminStatus" aria-live="polite">관리자 목록을 불러오는 중...</p>
+        <p id="adminStatus" aria-live="polite">계정 목록을 불러오는 중...</p>
         <div id="adminList" class="admin-list"></div>
         <p>추가할 계정은 먼저 NOVA에 회원가입되어 있어야 합니다.</p>
     </section>
@@ -110,44 +110,73 @@ async function loadVideos() {
     }
 }
 
-async function loadAdmins() {
+async function loadAccounts() {
     try {
-        const admins = await apiRequest(`${API_BASE_URL}/api/admin/admins`);
+        const users = await apiRequest(`${API_BASE_URL}/api/admin/users`);
         adminList.replaceChildren();
-        adminStatus.textContent = `관리자 ${admins.length}명`;
-        for (const admin of admins) {
+        const admins = users.filter(user => user.is_admin).length;
+        adminStatus.textContent = `전체 계정 ${users.length}개 · 관리자 ${admins}명`;
+        for (const user of users) {
             const row = document.createElement("article");
             row.className = "admin-video";
             const details = document.createElement("div");
             const nickname = document.createElement("h2");
-            nickname.textContent = admin.nickname;
-            const id = document.createElement("p");
-            id.textContent = admin.id;
-            details.append(nickname, id);
+            nickname.textContent = `${user.nickname}${user.id === currentUserId ? " (내 계정)" : ""}`;
+            const meta = document.createElement("p");
+            const created = user.created_at ? new Date(user.created_at).toLocaleString("ko-KR") : "날짜 정보 없음";
+            meta.textContent = `${user.is_admin ? "관리자" : "일반 회원"} · 가입일 ${created}`;
+            details.append(nickname, meta);
             row.appendChild(details);
-            if (admin.id !== currentUserId) {
-                const remove = document.createElement("button");
-                remove.type = "button";
-                remove.textContent = "권한 해제";
-                remove.addEventListener("click", () => removeAdmin(admin, remove));
-                row.appendChild(remove);
-            }
+            const actions = document.createElement("div");
+            actions.style.display = "flex";
+            actions.style.gap = "8px";
+            actions.style.flexWrap = "wrap";
+            const roleButton = document.createElement("button");
+            roleButton.style.background = user.is_admin ? "#555" : "#246b45";
+            roleButton.textContent = user.is_admin ? "관리자 해제" : "관리자 지정";
+            roleButton.disabled = user.id === currentUserId;
+            roleButton.title = user.id === currentUserId ? "현재 로그인한 계정의 권한은 이 화면에서 변경할 수 없습니다." : "";
+            roleButton.addEventListener("click", () => changeRole(user, !user.is_admin, roleButton));
+            const deleteButton = document.createElement("button");
+            deleteButton.textContent = "계정 삭제";
+            deleteButton.disabled = user.id === currentUserId;
+            deleteButton.title = user.id === currentUserId ? "현재 로그인한 계정은 삭제할 수 없습니다." : "";
+            deleteButton.addEventListener("click", () => deleteAccount(user, deleteButton));
+            actions.append(roleButton, deleteButton);
+            row.appendChild(actions);
             adminList.appendChild(row);
         }
     } catch (error) {
-        adminStatus.textContent = `관리자 목록을 불러오지 못했습니다: ${error.message}`;
+        adminStatus.textContent = `계정 목록을 불러오지 못했습니다: ${error.message}`;
     }
 }
 
-async function removeAdmin(admin, button) {
-    if (!confirm(`${admin.nickname} 계정의 관리자 권한을 해제할까요?`)) return;
+async function changeRole(user, isAdmin, button) {
+    if (!confirm(`${user.nickname} 계정을 ${isAdmin ? "관리자로 지정" : "일반 회원으로 변경"}할까요?`)) return;
     button.disabled = true;
     try {
-        const result = await apiRequest(`${API_BASE_URL}/api/admin/admins/${encodeURIComponent(admin.id)}`, { method: "DELETE" });
+        const result = await apiRequest(`${API_BASE_URL}/api/admin/users/${encodeURIComponent(user.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_admin: isAdmin })
+        });
         adminStatus.textContent = result.message;
-        await loadAdmins();
+        await loadAccounts();
     } catch (error) {
-        adminStatus.textContent = `해제 실패: ${error.message}`;
+        adminStatus.textContent = `권한 변경 실패: ${error.message}`;
+        button.disabled = false;
+    }
+}
+
+async function deleteAccount(user, button) {
+    if (!confirm(`${user.nickname} 계정을 삭제할까요? 이 계정이 올린 영상과 저장 파일은 유지됩니다.`)) return;
+    button.disabled = true;
+    try {
+        const result = await apiRequest(`${API_BASE_URL}/api/admin/users/${encodeURIComponent(user.id)}`, { method: "DELETE" });
+        adminStatus.textContent = result.message;
+        await loadAccounts();
+    } catch (error) {
+        adminStatus.textContent = `계정 삭제 실패: ${error.message}`;
         button.disabled = false;
     }
 }
@@ -178,7 +207,7 @@ if (!accessToken) {
             status.textContent = "관리자 권한이 필요합니다.";
             adminStatus.textContent = "관리자 권한이 필요합니다.";
         } else {
-            await Promise.all([loadVideos(), loadAdmins()]);
+            await Promise.all([loadVideos(), loadAccounts()]);
         }
     } catch (error) {
         status.textContent = error.message;
