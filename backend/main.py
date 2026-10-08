@@ -140,11 +140,12 @@ async def list_videos():
         response = await client.get(
             f"{SUPABASE_URL}/rest/v1/videos",
             headers=headers,
-            params={"select": "id,title,storage_path,uploader_name,created_at", "order": "created_at.desc"},
+            params={"select": "id,title,storage_path,uploader_name,created_at,like_count", "order": "created_at.desc"},
         )
     raise_upstream(response)
     videos = response.json()
     for video in videos:
+        video["like_count"] = video.get("like_count") or 0
         path = quote(video["storage_path"], safe="/")
         video["url"] = f"{SUPABASE_URL}/storage/v1/object/public/videos/{path}"
     return videos
@@ -219,16 +220,112 @@ async def get_video(video_id: str):
         response = await client.get(
             f"{SUPABASE_URL}/rest/v1/videos",
             headers=headers,
-            params={"select": "id,title,storage_path,uploader_name", "id": f"eq.{video_id}", "limit": "1"},
+            params={"select": "id,title,storage_path,uploader_name,created_at,like_count", "id": f"eq.{video_id}", "limit": "1"},
         )
     raise_upstream(response)
     rows = response.json()
     if not rows:
         raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
     video = rows[0]
+    video["like_count"] = video.get("like_count") or 0
     path = quote(video["storage_path"], safe="/")
     video["url"] = f"{SUPABASE_URL}/storage/v1/object/public/videos/{path}"
     return video
+
+
+@app.get("/api/videos/{video_id}/comments")
+async def list_video_comments(video_id: str):
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(
+            f"{SUPABASE_URL}/rest/v1/nova_comments",
+            headers=admin_headers(),
+            params={"select": "id,video_id,user_id,nickname,content,created_at", "video_id": f"eq.{video_id}", "order": "created_at.desc"},
+        )
+    raise_upstream(response)
+    return response.json()
+
+
+@app.post("/api/videos/{video_id}/comments")
+async def add_video_comment(
+    video_id: str,
+    content: str = Body(..., embed=True),
+    authorization: str | None = Header(default=None),
+):
+    user = await authenticated_user(authorization)
+    content = content.strip()
+    if not content or len(content) > 1000:
+        raise HTTPException(status_code=400, detail="댓글은 1~1000자로 입력하세요.")
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            f"{SUPABASE_URL}/rest/v1/nova_comments",
+            headers={**admin_headers(), "Content-Type": "application/json", "Prefer": "return=representation"},
+            json={"video_id": video_id, "user_id": user["id"], "nickname": user["nickname"], "content": content},
+        )
+    raise_upstream(response)
+    rows = response.json()
+    return rows[0] if rows else {"message": "댓글을 등록했습니다."}
+
+
+@app.get("/api/videos/{video_id}/like")
+async def get_video_like(video_id: str, authorization: str | None = Header(default=None)):
+    liked = False
+    if authorization:
+        user = await authenticated_user(authorization)
+        async with httpx.AsyncClient(timeout=30) as client:
+            existing = await client.get(
+                f"{SUPABASE_URL}/rest/v1/nova_video_likes",
+                headers=admin_headers(),
+                params={"select": "video_id", "video_id": f"eq.{video_id}", "user_id": f"eq.{user['id']}", "limit": "1"},
+            )
+        raise_upstream(existing)
+        liked = bool(existing.json())
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers=admin_headers(),
+            params={"select": "like_count", "id": f"eq.{video_id}", "limit": "1"},
+        )
+    raise_upstream(response)
+    rows = response.json()
+    if not rows:
+        raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
+    return {"liked": liked, "like_count": rows[0].get("like_count") or 0}
+
+
+@app.post("/api/videos/{video_id}/like")
+async def toggle_video_like(video_id: str, authorization: str | None = Header(default=None)):
+    user = await authenticated_user(authorization)
+    async with httpx.AsyncClient(timeout=30) as client:
+        existing = await client.get(
+            f"{SUPABASE_URL}/rest/v1/nova_video_likes",
+            headers=admin_headers(),
+            params={"select": "video_id,user_id", "video_id": f"eq.{video_id}", "user_id": f"eq.{user['id']}", "limit": "1"},
+        )
+        raise_upstream(existing)
+        if existing.json():
+            response = await client.delete(
+                f"{SUPABASE_URL}/rest/v1/nova_video_likes",
+                headers=admin_headers(),
+                params={"video_id": f"eq.{video_id}", "user_id": f"eq.{user['id']}"},
+            )
+            liked = False
+        else:
+            response = await client.post(
+                f"{SUPABASE_URL}/rest/v1/nova_video_likes",
+                headers={**admin_headers(), "Content-Type": "application/json"},
+                json={"video_id": video_id, "user_id": user["id"]},
+            )
+            liked = True
+        raise_upstream(response)
+        count_response = await client.get(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers=admin_headers(),
+            params={"select": "like_count", "id": f"eq.{video_id}", "limit": "1"},
+        )
+    raise_upstream(count_response)
+    rows = count_response.json()
+    count = (rows[0].get("like_count") or 0) if rows else 0
+    return {"liked": liked, "like_count": count}
 
 
 @app.get("/api/admin/videos")

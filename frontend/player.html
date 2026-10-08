@@ -7,18 +7,128 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a href="upload.html">업로드</a></div></header>
+<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a href="upload.html">업로드</a><a id="authLink" href="login.html">로그인</a></div></header>
 <main class="player-page">
     <div class="player"><video id="player" controls playsinline></video></div>
     <h1 id="videoTitle">영상을 불러오는 중...</h1>
     <p id="videoInfo">NOVA</p>
+    <section class="interaction-panel">
+        <button id="likeButton" type="button">좋아요 <span id="likeCount">0</span></button>
+        <h2>댓글</h2>
+        <form id="commentForm">
+            <textarea id="commentInput" maxlength="1000" placeholder="댓글을 입력하세요" required></textarea>
+            <button type="submit">댓글 등록</button>
+        </form>
+        <p id="commentStatus" aria-live="polite"></p>
+        <div id="comments" class="comment-list" aria-live="polite"></div>
+    </section>
 </main>
+<style>
+.interaction-panel { margin-top: 28px; padding: 20px; background: #181818; border: 1px solid #333; border-radius: 10px; }
+.interaction-panel button { padding: 10px 16px; border: 0; border-radius: 6px; background: #6b45a5; color: white; cursor: pointer; }
+#commentForm { display: grid; gap: 10px; }
+#commentInput { min-height: 88px; padding: 12px; color: white; background: #222; border: 1px solid #444; border-radius: 6px; resize: vertical; font: inherit; }
+.comment-list { display: grid; gap: 12px; margin-top: 16px; }
+.comment { padding: 14px; background: #222; border-radius: 6px; }
+.comment p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment time { color: #999; font-size: 13px; }
+</style>
 <script type="module">
 import { API_BASE_URL } from "./api-config.js";
 const videoId = new URLSearchParams(location.search).get("video");
 const player = document.getElementById("player");
 const title = document.getElementById("videoTitle");
 const info = document.getElementById("videoInfo");
+const authLink = document.getElementById("authLink");
+const likeButton = document.getElementById("likeButton");
+const likeCount = document.getElementById("likeCount");
+const comments = document.getElementById("comments");
+const commentForm = document.getElementById("commentForm");
+const commentInput = document.getElementById("commentInput");
+const commentStatus = document.getElementById("commentStatus");
+const accessToken = localStorage.getItem("nova_access_token");
+
+function setAuthLink() {
+    if (!accessToken) return;
+    authLink.textContent = "로그아웃";
+    authLink.href = "#logout";
+    authLink.addEventListener("click", event => {
+        event.preventDefault();
+        localStorage.removeItem("nova_access_token");
+        localStorage.removeItem("nova_user");
+        location.reload();
+    });
+}
+
+async function apiRequest(url, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const response = await fetch(url, { ...options, headers });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || `요청 실패 (${response.status})`);
+    return result;
+}
+
+function renderComments(items) {
+    comments.replaceChildren();
+    if (!items.length) {
+        comments.textContent = "아직 댓글이 없습니다.";
+        return;
+    }
+    for (const item of items) {
+        const article = document.createElement("article");
+        article.className = "comment";
+        const author = document.createElement("strong");
+        author.textContent = item.nickname || "탈퇴한 회원";
+        const date = document.createElement("time");
+        date.dateTime = item.created_at;
+        date.textContent = new Date(item.created_at).toLocaleString("ko-KR");
+        const body = document.createElement("p");
+        body.textContent = item.content;
+        article.append(author, document.createTextNode(" · "), date, body);
+        comments.appendChild(article);
+    }
+}
+
+async function loadComments() {
+    try { renderComments(await apiRequest(`${API_BASE_URL}/api/videos/${encodeURIComponent(videoId)}/comments`)); }
+    catch (error) { commentStatus.textContent = `댓글을 불러오지 못했습니다: ${error.message}`; }
+}
+
+async function loadLike() {
+    try {
+        const result = await apiRequest(`${API_BASE_URL}/api/videos/${encodeURIComponent(videoId)}/like`);
+        likeCount.textContent = result.like_count;
+        likeButton.setAttribute("aria-pressed", String(result.liked));
+        likeButton.textContent = `${result.liked ? "좋아요 취소" : "좋아요"} ${result.like_count}`;
+    } catch (error) { commentStatus.textContent = error.message; }
+}
+
+likeButton.addEventListener("click", async () => {
+    if (!accessToken) { location.href = "login.html"; return; }
+    likeButton.disabled = true;
+    try { await apiRequest(`${API_BASE_URL}/api/videos/${encodeURIComponent(videoId)}/like`, { method: "POST" }); await loadLike(); }
+    catch (error) { commentStatus.textContent = error.message; }
+    finally { likeButton.disabled = false; }
+});
+
+commentForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!accessToken) { location.href = "login.html"; return; }
+    const content = commentInput.value.trim();
+    if (!content) return;
+    commentStatus.textContent = "댓글 등록 중...";
+    try {
+        await apiRequest(`${API_BASE_URL}/api/videos/${encodeURIComponent(videoId)}/comments`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content })
+        });
+        commentInput.value = "";
+        commentStatus.textContent = "댓글을 등록했습니다.";
+        await loadComments();
+    } catch (error) { commentStatus.textContent = `댓글 등록 실패: ${error.message}`; }
+});
+
+setAuthLink();
 async function loadVideo() {
     if (!videoId) { title.textContent = "영상 주소가 올바르지 않습니다."; return; }
     try {
@@ -28,6 +138,7 @@ async function loadVideo() {
         title.textContent = video.title;
         info.textContent = video.uploader_name || "NOVA";
         player.src = video.url;
+        await Promise.all([loadLike(), loadComments()]);
     } catch (error) {
         console.error(error);
         title.textContent = `영상 재생 실패: ${error.message}`;

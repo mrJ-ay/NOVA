@@ -54,8 +54,9 @@ updateAuthLink(localStorage.getItem("nova_access_token"));
 function renderVideos(query = "") {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const filtered = allVideos.filter(v => (v.title || "").toLocaleLowerCase().includes(normalizedQuery));
+    if (normalizedQuery) filtered.sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
     videoGrid.replaceChildren();
-    pageTitle.textContent = normalizedQuery ? `검색 결과 (${filtered.length})` : "최신 영상";
+    pageTitle.textContent = normalizedQuery ? `검색 결과 · 좋아요순 (${filtered.length})` : "최신 영상";
     if (!filtered.length) {
         const p = document.createElement("p");
         p.textContent = normalizedQuery ? "검색 결과가 없습니다. 다른 제목으로 검색해 보세요." : "아직 업로드된 영상이 없습니다.";
@@ -74,7 +75,7 @@ function renderVideos(query = "") {
         const title = document.createElement("h2");
         title.textContent = v.title;
         const label = document.createElement("p");
-        label.textContent = v.uploader_name || "NOVA";
+        label.textContent = `${v.uploader_name || "NOVA"} · 좋아요 ${v.like_count || 0}`;
         card.append(preview, title, label);
         card.addEventListener("click", () => location.href = `player.html?video=${encodeURIComponent(v.id)}`);
         videoGrid.appendChild(card);
