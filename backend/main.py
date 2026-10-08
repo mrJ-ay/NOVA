@@ -10,12 +10,18 @@ app = FastAPI(title="NOVA API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "apikey"],
 )
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+ADMIN_USER_IDS = {
+    user_id.strip()
+    for user_id in os.environ.get("NOVA_ADMIN_USER_IDS", "").split(",")
+    if user_id.strip()
+}
 ALLOWED_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
 
 
@@ -35,6 +41,44 @@ def raise_upstream(response: httpx.Response) -> None:
         except Exception:
             detail = response.text
         raise HTTPException(status_code=response.status_code, detail=str(detail))
+
+
+async def authenticated_user(authorization: str | None) -> tuple[str, str]:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    token = authorization.split(" ", 1)[1]
+    headers = config_headers(token)
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(f"{SUPABASE_URL}/auth/v1/user", headers=headers)
+    if response.is_error:
+        raise HTTPException(status_code=401, detail="로그인 정보를 확인할 수 없습니다.")
+    user_id = response.json().get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="로그인 정보를 확인할 수 없습니다.")
+    return user_id, token
+
+
+def require_admin_config() -> None:
+    if not ADMIN_USER_IDS:
+        raise HTTPException(status_code=503, detail="관리자 계정이 아직 설정되지 않았습니다.")
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(status_code=503, detail="관리자용 Supabase 키가 아직 설정되지 않았습니다.")
+
+
+def admin_headers() -> dict[str, str]:
+    require_admin_config()
+    return {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    }
+
+
+async def require_admin(authorization: str | None) -> str:
+    require_admin_config()
+    user_id, _token = await authenticated_user(authorization)
+    if user_id not in ADMIN_USER_IDS:
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+    return user_id
 
 
 @app.get("/health")
@@ -76,6 +120,54 @@ async def get_video(video_id: str):
     path = quote(video["storage_path"], safe="/")
     video["url"] = f"{SUPABASE_URL}/storage/v1/object/public/videos/{path}"
     return video
+
+
+@app.get("/api/admin/videos")
+async def admin_list_videos(authorization: str | None = Header(default=None)):
+    await require_admin(authorization)
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers=admin_headers(),
+            params={"select": "id,title,storage_path,created_at,user_id", "order": "created_at.desc"},
+        )
+    raise_upstream(response)
+    videos = response.json()
+    for video in videos:
+        path = quote(video["storage_path"], safe="/")
+        video["url"] = f"{SUPABASE_URL}/storage/v1/object/public/videos/{path}"
+    return videos
+
+
+@app.delete("/api/admin/videos/{video_id}")
+async def admin_delete_video(video_id: str, authorization: str | None = Header(default=None)):
+    await require_admin(authorization)
+    headers = admin_headers()
+    async with httpx.AsyncClient(timeout=30) as client:
+        lookup = await client.get(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers=headers,
+            params={"select": "id,storage_path", "id": f"eq.{video_id}", "limit": "1"},
+        )
+        raise_upstream(lookup)
+        rows = lookup.json()
+        if not rows:
+            raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
+
+        storage_path = quote(rows[0]["storage_path"], safe="/")
+        delete_row = await client.delete(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers={**headers, "Prefer": "return=minimal"},
+            params={"id": f"eq.{video_id}"},
+        )
+        raise_upstream(delete_row)
+        delete_file = await client.delete(
+            f"{SUPABASE_URL}/storage/v1/object/videos/{storage_path}",
+            headers=headers,
+        )
+        if delete_file.is_error:
+            raise HTTPException(status_code=502, detail="영상 정보는 지웠지만 저장 파일 삭제에 실패했습니다.")
+    return {"message": "영상이 삭제됐습니다."}
 
 
 @app.post("/api/upload")

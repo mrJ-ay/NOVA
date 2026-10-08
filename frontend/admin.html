@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOVA 관리자</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .admin-container { max-width: 1000px; margin: 40px auto; padding: 0 24px; }
+        .admin-list { display: grid; gap: 12px; }
+        .admin-video { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px; background: #1b1b1b; border: 1px solid #333; border-radius: 8px; }
+        .admin-video h2 { margin: 0 0 8px; font-size: 18px; }
+        .admin-video p { margin: 0; color: #aaa; overflow-wrap: anywhere; }
+        .admin-video button { flex: 0 0 auto; padding: 10px 16px; border: 0; border-radius: 5px; background: #a83232; color: white; cursor: pointer; }
+        .admin-video button:disabled { opacity: .6; cursor: wait; }
+        @media (max-width: 600px) { .admin-video { align-items: flex-start; flex-direction: column; } }
+    </style>
+</head>
+<body>
+<header class="navbar">
+    <div class="logo">NOVA</div>
+    <div class="nav-buttons"><a href="index.html">홈</a><a href="upload.html">업로드</a><a id="authLink" href="login.html">로그인</a></div>
+</header>
+<main class="admin-container">
+    <h1>영상 관리자</h1>
+    <p id="status" aria-live="polite">관리자 권한을 확인하는 중...</p>
+    <section id="videoList" class="admin-list" aria-live="polite"></section>
+</main>
+<script type="module">
+import { supabase } from "./supabase.js";
+import { API_BASE_URL } from "./api-config.js";
+
+const status = document.getElementById("status");
+const videoList = document.getElementById("videoList");
+const authLink = document.getElementById("authLink");
+let accessToken = null;
+
+function updateAuthLink(session) {
+    if (session) {
+        authLink.textContent = "로그아웃";
+        authLink.href = "#logout";
+        authLink.onclick = async event => {
+            event.preventDefault();
+            await supabase.auth.signOut();
+            location.href = "index.html";
+        };
+    } else {
+        authLink.textContent = "로그인";
+        authLink.href = "login.html";
+        authLink.onclick = null;
+    }
+}
+
+async function apiRequest(url, options = {}) {
+    const response = await fetch(url, {
+        ...options,
+        headers: { Authorization: `Bearer ${accessToken}`, ...(options.headers || {}) }
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || result.message || `요청 실패 (${response.status})`);
+    return result;
+}
+
+function renderVideos(videos) {
+    videoList.replaceChildren();
+    if (!videos.length) {
+        status.textContent = "등록된 영상이 없습니다.";
+        return;
+    }
+    status.textContent = `전체 영상 ${videos.length}개`;
+    for (const video of videos) {
+        const row = document.createElement("article");
+        row.className = "admin-video";
+        const details = document.createElement("div");
+        const title = document.createElement("h2");
+        title.textContent = video.title || "제목 없음";
+        const meta = document.createElement("p");
+        meta.textContent = `ID: ${video.id} · 업로더: ${video.user_id || "정보 없음"}`;
+        details.append(title, meta);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "영상 삭제";
+        remove.addEventListener("click", () => deleteVideo(video, remove));
+        row.append(details, remove);
+        videoList.appendChild(row);
+    }
+}
+
+async function loadVideos() {
+    status.textContent = "관리자 권한을 확인하는 중...";
+    try {
+        const videos = await apiRequest(`${API_BASE_URL}/api/admin/videos`);
+        renderVideos(videos);
+    } catch (error) {
+        status.textContent = error.message;
+        videoList.replaceChildren();
+    }
+}
+
+async function deleteVideo(video, button) {
+    if (!confirm(`'${video.title}' 영상을 삭제할까요? 저장된 영상 파일도 함께 삭제됩니다.`)) return;
+    button.disabled = true;
+    button.textContent = "삭제 중...";
+    try {
+        await apiRequest(`${API_BASE_URL}/api/admin/videos/${encodeURIComponent(video.id)}`, { method: "DELETE" });
+        await loadVideos();
+    } catch (error) {
+        status.textContent = `삭제 실패: ${error.message}`;
+        button.disabled = false;
+        button.textContent = "영상 삭제";
+    }
+}
+
+const { data: { session } } = await supabase.auth.getSession();
+updateAuthLink(session);
+if (!session) {
+    status.textContent = "관리자 로그인이 필요합니다. 로그인 후 다시 접속하세요.";
+} else {
+    accessToken = session.access_token;
+    await loadVideos();
+}
+</script>
+</body>
+</html>
