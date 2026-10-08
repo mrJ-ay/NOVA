@@ -1,4 +1,9 @@
 import os
+import hmac
+import base64
+import hashlib
+import json
+import time
 from uuid import uuid4
 from urllib.parse import quote
 
@@ -17,11 +22,7 @@ app.add_middleware(
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-ADMIN_USER_IDS = {
-    user_id.strip()
-    for user_id in os.environ.get("NOVA_ADMIN_USER_IDS", "").split(",")
-    if user_id.strip()
-}
+NOVA_ADMIN_MANAGEMENT_KEY = os.environ.get("NOVA_ADMIN_MANAGEMENT_KEY", "")
 ALLOWED_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
 
 
@@ -72,11 +73,43 @@ def admin_headers() -> dict[str, str]:
     return headers
 
 
+def encode_token_part(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def create_admin_management_token() -> str:
+    payload = encode_token_part(json.dumps(
+        {"sub": "nova-admin-manager", "exp": int(time.time()) + 1800},
+        separators=(",", ":"),
+    ).encode("utf-8"))
+    signature = hmac.new(NOVA_ADMIN_MANAGEMENT_KEY.encode("utf-8"), payload.encode("ascii"), hashlib.sha256).digest()
+    return f"{payload}.{encode_token_part(signature)}"
+
+
+def verify_admin_management_token(authorization: str | None) -> None:
+    if not NOVA_ADMIN_MANAGEMENT_KEY:
+        raise HTTPException(status_code=503, detail="NOVA_ADMIN_MANAGEMENT_KEY가 설정되지 않았습니다.")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="관리자 로그인 토큰이 필요합니다.")
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload, supplied_signature = token.split(".", 1)
+        expected_signature = hmac.new(NOVA_ADMIN_MANAGEMENT_KEY.encode("utf-8"), payload.encode("ascii"), hashlib.sha256).digest()
+        padded_signature = supplied_signature + "=" * (-len(supplied_signature) % 4)
+        decoded_signature = base64.urlsafe_b64decode(padded_signature.encode("ascii"))
+        padded_payload = payload + "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(padded_payload.encode("ascii")))
+    except Exception as error:
+        raise HTTPException(status_code=401, detail="관리자 로그인 토큰이 올바르지 않습니다.") from error
+    if not hmac.compare_digest(decoded_signature, expected_signature):
+        raise HTTPException(status_code=401, detail="관리자 로그인 토큰이 올바르지 않습니다.")
+    if claims.get("sub") != "nova-admin-manager" or claims.get("exp", 0) <= int(time.time()):
+        raise HTTPException(status_code=401, detail="관리자 로그인 토큰이 만료됐습니다. 다시 로그인하세요.")
+
+
 async def require_admin(authorization: str | None) -> str:
     require_admin_config()
     user_id, _token = await authenticated_user(authorization)
-    if user_id in ADMIN_USER_IDS:
-        return user_id
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.get(
             f"{SUPABASE_URL}/auth/v1/admin/users/{quote(user_id, safe='')}",
@@ -170,11 +203,20 @@ async def admin_list_admins(authorization: str | None = Header(default=None)):
     async with httpx.AsyncClient(timeout=30) as client:
         users = await list_auth_users(client)
     admins = [
-        {"id": user["id"], "email": user.get("email") or "이메일 없음", "root": user["id"] in ADMIN_USER_IDS}
+        {"id": user["id"], "email": user.get("email") or "이메일 없음"}
         for user in users
-        if user["id"] in ADMIN_USER_IDS or user.get("app_metadata", {}).get("nova_role") == "admin"
+        if user.get("app_metadata", {}).get("nova_role") == "admin"
     ]
     return admins
+
+
+@app.post("/api/admin/login")
+async def admin_management_login(management_key: str = Body(..., embed=True)):
+    if not NOVA_ADMIN_MANAGEMENT_KEY:
+        raise HTTPException(status_code=503, detail="NOVA_ADMIN_MANAGEMENT_KEY가 설정되지 않았습니다.")
+    if not hmac.compare_digest(management_key, NOVA_ADMIN_MANAGEMENT_KEY):
+        raise HTTPException(status_code=401, detail="관리자 등록 키가 올바르지 않습니다.")
+    return {"access_token": create_admin_management_token(), "token_type": "Bearer", "expires_in": 1800}
 
 
 @app.post("/api/admin/admins")
@@ -182,7 +224,8 @@ async def admin_add_admin(
     email: str = Body(..., embed=True),
     authorization: str | None = Header(default=None),
 ):
-    await require_admin(authorization)
+    require_admin_config()
+    verify_admin_management_token(authorization)
     email = email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="올바른 이메일 주소를 입력하세요.")
@@ -206,8 +249,6 @@ async def admin_add_admin(
 @app.delete("/api/admin/admins/{user_id}")
 async def admin_remove_admin(user_id: str, authorization: str | None = Header(default=None)):
     await require_admin(authorization)
-    if user_id in ADMIN_USER_IDS:
-        raise HTTPException(status_code=400, detail="초기 관리자 계정은 이 화면에서 해제할 수 없습니다.")
     async with httpx.AsyncClient(timeout=30) as client:
         users = await list_auth_users(client)
         target = next((user for user in users if user.get("id") == user_id), None)
@@ -215,7 +256,7 @@ async def admin_remove_admin(user_id: str, authorization: str | None = Header(de
             raise HTTPException(status_code=404, detail="관리자를 찾을 수 없습니다.")
         active_admin_ids = {
             user["id"] for user in users
-            if user["id"] in ADMIN_USER_IDS or user.get("app_metadata", {}).get("nova_role") == "admin"
+            if user.get("app_metadata", {}).get("nova_role") == "admin"
         }
         if len(active_admin_ids) <= 1:
             raise HTTPException(status_code=400, detail="마지막 관리자는 해제할 수 없습니다. 먼저 다른 계정을 관리자로 추가하세요.")
