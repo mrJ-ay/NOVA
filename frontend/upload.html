@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a href="login.html">로그인</a></div></header>
+<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a id="authLink" href="login.html">로그인</a></div></header>
 <main class="upload-container">
     <h1>영상 업로드</h1>
     <input id="title" type="text" placeholder="영상 제목">
@@ -18,11 +18,42 @@
 <script type="module">
 import { supabase } from "./supabase.js";
 import { API_BASE_URL } from "./api-config.js";
+const authLink = document.getElementById("authLink");
 const titleInput = document.getElementById("title");
 const fileInput = document.getElementById("videoFile");
 const button = document.getElementById("uploadButton");
 const message = document.getElementById("message");
 button.addEventListener("click", uploadVideo);
+
+function updateAuthLink(session) {
+    if (session) {
+        authLink.textContent = "로그아웃";
+        authLink.href = "#logout";
+        authLink.onclick = logout;
+    } else {
+        authLink.textContent = "로그인";
+        authLink.href = "login.html";
+        authLink.onclick = null;
+    }
+}
+
+async function logout(event) {
+    event.preventDefault();
+    authLink.textContent = "로그아웃 중...";
+    authLink.onclick = null;
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        console.error("로그아웃 실패:", error);
+        authLink.textContent = "로그아웃";
+        authLink.onclick = logout;
+        return;
+    }
+    updateAuthLink(null);
+}
+
+const { data: { session } } = await supabase.auth.getSession();
+updateAuthLink(session);
+supabase.auth.onAuthStateChange((_event, newSession) => updateAuthLink(newSession));
 
 async function uploadVideo() {
     const title = titleInput.value.trim();
