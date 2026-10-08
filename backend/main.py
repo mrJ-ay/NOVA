@@ -16,7 +16,7 @@ app.add_middleware(
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 ADMIN_USER_IDS = {
     user_id.strip()
     for user_id in os.environ.get("NOVA_ADMIN_USER_IDS", "").split(",")
@@ -59,16 +59,17 @@ async def authenticated_user(authorization: str | None) -> tuple[str, str]:
 
 
 def require_admin_config() -> None:
-    if not SUPABASE_SERVICE_ROLE_KEY:
+    if not SUPABASE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="관리자용 Supabase 키가 아직 설정되지 않았습니다.")
 
 
 def admin_headers() -> dict[str, str]:
     require_admin_config()
-    return {
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-    }
+    headers = {"apikey": SUPABASE_SECRET_KEY}
+    # New Supabase secret keys are API keys, not JWTs; legacy service_role keys also work as Bearer JWTs.
+    if not SUPABASE_SECRET_KEY.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {SUPABASE_SECRET_KEY}"
+    return headers
 
 
 async def require_admin(authorization: str | None) -> str:
