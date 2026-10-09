@@ -140,7 +140,7 @@ async def list_videos():
         response = await client.get(
             f"{SUPABASE_URL}/rest/v1/videos",
             headers=headers,
-            params={"select": "id,title,storage_path,uploader_name,created_at,like_count", "order": "created_at.desc"},
+            params={"select": "id,title,description,storage_path,uploader_name,created_at,like_count", "order": "created_at.desc"},
         )
     raise_upstream(response)
     videos = response.json()
@@ -220,7 +220,7 @@ async def get_video(video_id: str):
         response = await client.get(
             f"{SUPABASE_URL}/rest/v1/videos",
             headers=headers,
-            params={"select": "id,title,storage_path,uploader_name,created_at,like_count", "id": f"eq.{video_id}", "limit": "1"},
+            params={"select": "id,title,description,storage_path,uploader_name,created_at,like_count", "id": f"eq.{video_id}", "limit": "1"},
         )
     raise_upstream(response)
     rows = response.json()
@@ -493,12 +493,16 @@ async def admin_delete_video(video_id: str, authorization: str | None = Header(d
 @app.post("/api/upload")
 async def upload_video(
     title: str = Form(...),
+    description: str = Form(default=""),
     file: UploadFile = File(...),
     authorization: str | None = Header(default=None),
 ):
     title = title.strip()
+    description = description.strip()
     if not title:
         raise HTTPException(status_code=400, detail="영상 제목을 입력하세요.")
+    if len(description) > 5000:
+        raise HTTPException(status_code=400, detail="영상 설명은 5000자 이하로 입력하세요.")
     user = await authenticated_user(authorization)
     headers = admin_headers()
     async with httpx.AsyncClient(timeout=60) as client:
@@ -527,6 +531,7 @@ async def upload_video(
             headers={**headers, "Content-Type": "application/json", "Prefer": "return=minimal"},
             json={
                 "title": title,
+                "description": description,
                 "storage_path": storage_path,
                 "owner_id": user["id"],
                 "uploader_name": user["nickname"],

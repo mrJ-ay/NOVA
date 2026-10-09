@@ -12,6 +12,10 @@
     <div class="player"><video id="player" controls playsinline></video></div>
     <h1 id="videoTitle">영상을 불러오는 중...</h1>
     <p id="videoInfo">NOVA</p>
+    <section class="video-description" aria-labelledby="descriptionHeading">
+        <h2 id="descriptionHeading">영상 설명</h2>
+        <p id="videoDescription">설명을 불러오는 중...</p>
+    </section>
     <section class="interaction-panel">
         <button id="likeButton" type="button">좋아요 <span id="likeCount">0</span></button>
         <h2>댓글</h2>
@@ -25,6 +29,9 @@
 </main>
 <style>
 .interaction-panel { margin-top: 28px; padding: 20px; background: #181818; border: 1px solid #333; border-radius: 10px; }
+.video-description { margin-top: 18px; padding: 20px; background: #181818; border: 1px solid #333; border-radius: 10px; }
+.video-description h2 { margin: 0 0 10px; font-size: 18px; }
+.video-description p { margin: 0; color: #ddd; white-space: pre-wrap; overflow-wrap: anywhere; }
 .interaction-panel button { padding: 10px 16px; border: 0; border-radius: 6px; background: #6b45a5; color: white; cursor: pointer; }
 #commentForm { display: grid; gap: 10px; }
 #commentInput { min-height: 88px; padding: 12px; color: white; background: #222; border: 1px solid #444; border-radius: 6px; resize: vertical; font: inherit; }
@@ -39,6 +46,7 @@ const videoId = new URLSearchParams(location.search).get("video");
 const player = document.getElementById("player");
 const title = document.getElementById("videoTitle");
 const info = document.getElementById("videoInfo");
+const description = document.getElementById("videoDescription");
 const authLink = document.getElementById("authLink");
 const likeButton = document.getElementById("likeButton");
 const likeCount = document.getElementById("likeCount");
@@ -137,6 +145,7 @@ async function loadVideo() {
         if (!response.ok) throw new Error(video.detail || "영상을 찾을 수 없습니다.");
         title.textContent = video.title;
         info.textContent = video.uploader_name || "NOVA";
+        description.textContent = video.description || "이 영상에는 설명이 없습니다.";
         player.src = video.url;
         await Promise.all([loadLike(), loadComments()]);
     } catch (error) {

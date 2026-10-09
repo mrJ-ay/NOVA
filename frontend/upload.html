@@ -11,6 +11,7 @@
 <main class="upload-container">
     <h1>영상 업로드</h1>
     <input id="title" type="text" placeholder="영상 제목">
+    <textarea id="description" maxlength="5000" placeholder="영상 상세 설명 (선택, 최대 5000자)"></textarea>
     <input id="videoFile" type="file" accept="video/*">
     <button id="uploadButton" type="button">업로드</button>
     <p id="message" aria-live="polite"></p>
@@ -20,6 +21,7 @@ import { API_BASE_URL } from "./api-config.js";
 const authLink = document.getElementById("authLink");
 const adminLink = document.getElementById("adminLink");
 const titleInput = document.getElementById("title");
+const descriptionInput = document.getElementById("description");
 const fileInput = document.getElementById("videoFile");
 const button = document.getElementById("uploadButton");
 const message = document.getElementById("message");
@@ -73,6 +75,7 @@ async function uploadVideo() {
     try {
         const form = new FormData();
         form.append("title", title);
+        form.append("description", descriptionInput.value.trim());
         form.append("file", file);
         const response = await fetch(`${API_BASE_URL}/api/upload`, {
             method: "POST",
@@ -83,6 +86,7 @@ async function uploadVideo() {
         if (!response.ok) throw new Error(result.detail || "업로드에 실패했습니다.");
         message.textContent = "업로드가 완료됐습니다.";
         titleInput.value = "";
+        descriptionInput.value = "";
         fileInput.value = "";
     } catch (error) {
         console.error(error);

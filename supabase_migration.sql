@@ -24,6 +24,9 @@ alter table public.videos alter column user_id drop not null;
 alter table public.videos
 add column if not exists like_count integer not null default 0;
 
+alter table public.videos
+add column if not exists description text not null default '';
+
 create table if not exists public.nova_video_likes (
     video_id uuid not null references public.videos(id) on delete cascade,
     user_id uuid not null references public.nova_users(id) on delete cascade,
