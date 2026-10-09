@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a href="upload.html">업로드</a><a id="authLink" href="login.html">로그인</a></div></header>
+<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a href="upload.html">업로드</a><a id="authLink" href="login.html">로그인</a><a id="accountLink" href="account.html" hidden>계정</a></div></header>
 <main class="player-page">
     <div class="player"><video id="player" controls playsinline></video></div>
     <h1 id="videoTitle">영상을 불러오는 중...</h1>
@@ -48,6 +48,7 @@ const title = document.getElementById("videoTitle");
 const info = document.getElementById("videoInfo");
 const description = document.getElementById("videoDescription");
 const authLink = document.getElementById("authLink");
+const accountLink = document.getElementById("accountLink");
 const likeButton = document.getElementById("likeButton");
 const likeCount = document.getElementById("likeCount");
 const comments = document.getElementById("comments");
@@ -58,6 +59,7 @@ const accessToken = localStorage.getItem("nova_access_token");
 
 function setAuthLink() {
     if (!accessToken) return;
+    accountLink.hidden = false;
     authLink.textContent = "로그아웃";
     authLink.href = "#logout";
     authLink.addEventListener("click", event => {

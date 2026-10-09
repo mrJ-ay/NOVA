@@ -213,6 +213,23 @@ async def auth_me(authorization: str | None = Header(default=None)):
     return {"id": user["id"], "nickname": user["nickname"], "is_admin": user["is_admin"]}
 
 
+@app.delete("/api/auth/me")
+async def delete_my_account(authorization: str | None = Header(default=None)):
+    user = await authenticated_user(authorization)
+    async with httpx.AsyncClient(timeout=30) as client:
+        if user.get("is_admin"):
+            users = await list_users(client)
+            if sum(1 for account in users if account.get("is_admin")) <= 1:
+                raise HTTPException(status_code=400, detail="마지막 관리자는 계정을 삭제할 수 없습니다. 먼저 다른 계정을 관리자로 지정하세요.")
+        response = await client.delete(
+            f"{SUPABASE_URL}/rest/v1/nova_users",
+            headers={**admin_headers(), "Prefer": "return=minimal"},
+            params={"id": f"eq.{user['id']}"},
+        )
+    raise_upstream(response)
+    return {"message": "계정이 삭제됐습니다. 업로드한 영상과 작성한 댓글은 유지됩니다."}
+
+
 @app.get("/api/videos/{video_id}")
 async def get_video(video_id: str):
     headers = admin_headers()

@@ -13,7 +13,7 @@
         <input id="searchInput" type="search" placeholder="영상 제목 검색" aria-label="영상 제목 검색">
         <button type="submit">검색</button>
     </form>
-    <div class="nav-buttons"><a id="authLink" href="login.html">로그인</a><a href="upload.html">업로드</a><a id="adminLink" href="admin.html" hidden>관리자</a></div>
+    <div class="nav-buttons"><a id="authLink" href="login.html">로그인</a><a id="accountLink" href="account.html" hidden>계정</a><a href="upload.html">업로드</a><a id="adminLink" href="admin.html" hidden>관리자</a></div>
 </header>
 <main class="container">
     <h1 id="pageTitle">최신 영상</h1>
@@ -26,6 +26,7 @@ const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
 const pageTitle = document.getElementById("pageTitle");
 const adminLink = document.getElementById("adminLink");
+const accountLink = document.getElementById("accountLink");
 let allVideos = [];
 
 const authLink = document.getElementById("authLink");
@@ -39,6 +40,7 @@ async function logout(event) {
 }
 
 function updateAuthLink(session) {
+    accountLink.hidden = !session;
     if (!session) adminLink.hidden = true;
     if (session) {
         authLink.textContent = "로그아웃";

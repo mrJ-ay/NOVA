@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a id="authLink" href="login.html">로그인</a><a id="adminLink" href="admin.html" hidden>관리자</a></div></header>
+<header class="navbar"><div class="logo">NOVA</div><div class="nav-buttons"><a href="index.html">홈</a><a id="authLink" href="login.html">로그인</a><a id="accountLink" href="account.html" hidden>계정</a><a id="adminLink" href="admin.html" hidden>관리자</a></div></header>
 <main class="upload-container">
     <h1>영상 업로드</h1>
     <input id="title" type="text" placeholder="영상 제목">
@@ -20,6 +20,7 @@
 import { API_BASE_URL } from "./api-config.js";
 const authLink = document.getElementById("authLink");
 const adminLink = document.getElementById("adminLink");
+const accountLink = document.getElementById("accountLink");
 const titleInput = document.getElementById("title");
 const descriptionInput = document.getElementById("description");
 const fileInput = document.getElementById("videoFile");
@@ -28,6 +29,7 @@ const message = document.getElementById("message");
 button.addEventListener("click", uploadVideo);
 
 function updateAuthLink(session) {
+    accountLink.hidden = !session;
     if (!session) adminLink.hidden = true;
     if (session) {
         authLink.textContent = "로그아웃";
