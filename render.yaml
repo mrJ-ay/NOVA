@@ -9,16 +9,20 @@ services:
     envVars:
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_SECRET_KEY
+      - key: SUPABASE_ANON_KEY
         sync: false
-      - key: NOVA_JWT_SECRET
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ONEID_API_URL
         sync: false
 
   - type: web
     name: nova-frontend
     runtime: static
     rootDir: frontend
-    buildCommand: printf 'export const API_BASE_URL = "%s";\n' "$NOVA_API_URL" > api-config.js
+    buildCommand: |
+      printf 'export const API_BASE_URL = "%s";\n' "$NOVA_API_URL" > api-config.js
+      printf 'export const ONEID_API_URL = "%s";\nexport const ONEID_CLIENT_ID = "nova";\nexport const ONEID_TOKEN_KEY = "nova_oneid_access_token";\n' "$ONEID_API_URL" > oneid-config.js
     staticPublishPath: .
     envVars:
       - key: NOVA_API_URL
@@ -26,3 +30,5 @@ services:
           type: web
           name: nova-api
           envVarKey: RENDER_EXTERNAL_URL
+      - key: ONEID_API_URL
+        sync: false

@@ -3,109 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NOVA 로그인</title>
+    <title>NOVA ONEID 로그인</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="login-container">
     <h1>NOVA</h1>
-    <h2 id="formTitle">로그인</h2>
-    <input id="nickname" type="text" placeholder="닉네임" autocomplete="nickname" maxlength="40">
-    <input id="password" type="password" placeholder="비밀번호" autocomplete="current-password">
-    <button id="loginButton" type="button">로그인</button>
-    <button id="registerModeButton" type="button">회원가입</button>
-    <button id="registerButton" type="button" hidden>가입하기</button>
-    <button id="loginModeButton" type="button" hidden>로그인으로 돌아가기</button>
+    <h2>ONEID 공통 로그인</h2>
+    <p>NOVA와 연결된 ONEID 계정으로 로그인하세요.</p>
+    <button id="loginButton" type="button">ONEID로 로그인</button>
+    <section id="migrationPanel" hidden>
+        <hr><h3>기존 NOVA 계정 연결</h3>
+        <p>기존 영상을 이어 관리하려면 예전 이메일과 비밀번호를 한 번 입력하세요.</p>
+        <input id="legacyEmail" type="email" placeholder="기존 이메일" autocomplete="username">
+        <input id="legacyPassword" type="password" placeholder="기존 비밀번호" autocomplete="current-password">
+        <button id="linkLegacyButton" type="button">기존 계정 연결</button>
+        <button id="createNewButton" type="button">새 NOVA 계정으로 시작</button>
+    </section>
     <p id="message" aria-live="polite"></p>
+    <a href="index.html">홈으로</a>
 </div>
-<script type="module">
-import { API_BASE_URL } from "./api-config.js";
-
-const passwordInput = document.getElementById("password");
-const nicknameInput = document.getElementById("nickname");
-const message = document.getElementById("message");
-const formTitle = document.getElementById("formTitle");
-const loginButton = document.getElementById("loginButton");
-const registerModeButton = document.getElementById("registerModeButton");
-const registerButton = document.getElementById("registerButton");
-const loginModeButton = document.getElementById("loginModeButton");
-
-loginButton.addEventListener("click", login);
-registerModeButton.addEventListener("click", () => setMode(true));
-registerButton.addEventListener("click", register);
-loginModeButton.addEventListener("click", () => setMode(false));
-
-function setMode(registering) {
-    loginButton.hidden = registering;
-    registerModeButton.hidden = registering;
-    registerButton.hidden = !registering;
-    loginModeButton.hidden = !registering;
-    formTitle.textContent = registering ? "회원가입" : "로그인";
-    document.getElementById("password").autocomplete = registering ? "new-password" : "current-password";
-    message.textContent = "";
-}
-
-async function login() {
-    const nickname = nicknameInput.value.trim();
-    const password = passwordInput.value;
-    if (!nickname || !password) {
-        message.textContent = "닉네임과 비밀번호를 입력하세요.";
-        return;
-    }
-
-    message.textContent = "로그인 중...";
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nickname, password })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || "로그인 정보를 확인하세요.");
-        localStorage.setItem("nova_access_token", result.access_token);
-        localStorage.setItem("nova_user", JSON.stringify(result.user));
-    } catch (error) {
-        message.textContent = `로그인 실패: ${error.message}`;
-        return;
-    }
-    window.location.href = "index.html";
-}
-
-async function register() {
-    const nickname = nicknameInput.value.trim();
-    const password = passwordInput.value;
-    if (!nickname || !password) {
-        message.textContent = "닉네임과 비밀번호를 입력하세요.";
-        return;
-    }
-    if (nickname.length > 40) {
-        message.textContent = "닉네임은 40자 이내로 입력하세요.";
-        return;
-    }
-    if (password.length < 6) {
-        message.textContent = "비밀번호는 6자 이상 입력하세요.";
-        return;
-    }
-
-    message.textContent = "회원가입 중...";
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nickname, password })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || "회원가입에 실패했습니다.");
-        localStorage.setItem("nova_access_token", result.access_token);
-        localStorage.setItem("nova_user", JSON.stringify(result.user));
-        message.textContent = "회원가입과 로그인이 완료됐습니다.";
-        window.location.href = "index.html";
-    } catch (error) {
-        message.textContent = `회원가입 실패: ${error.message}`;
-    }
-}
-
-setMode(false);
-</script>
+<script type="module" src="oneid-login.js"></script>
 </body>
 </html>

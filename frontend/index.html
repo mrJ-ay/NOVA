@@ -13,7 +13,7 @@
         <input id="searchInput" type="search" placeholder="영상 제목 검색" aria-label="영상 제목 검색">
         <button type="submit">검색</button>
     </form>
-    <div class="nav-buttons"><a id="authLink" href="login.html">로그인</a><a id="accountLink" href="account.html" hidden>계정</a><a href="upload.html">업로드</a><a id="adminLink" href="admin.html" hidden>관리자</a></div>
+    <div class="nav-buttons"><a href="login.html">ONEID 로그인</a><a href="upload.html">업로드</a></div>
 </header>
 <main class="container">
     <h1 id="pageTitle">최신 영상</h1>
@@ -25,54 +25,13 @@ const videoGrid = document.getElementById("videoGrid");
 const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
 const pageTitle = document.getElementById("pageTitle");
-const adminLink = document.getElementById("adminLink");
-const accountLink = document.getElementById("accountLink");
 let allVideos = [];
-
-const authLink = document.getElementById("authLink");
-async function logout(event) {
-    event.preventDefault();
-    authLink.textContent = "로그아웃 중...";
-    authLink.onclick = null;
-    localStorage.removeItem("nova_access_token");
-    localStorage.removeItem("nova_user");
-    updateAuthLink(null);
-}
-
-function updateAuthLink(session) {
-    accountLink.hidden = !session;
-    if (!session) adminLink.hidden = true;
-    if (session) {
-        authLink.textContent = "로그아웃";
-        authLink.href = "#logout";
-        authLink.onclick = logout;
-    } else {
-        authLink.textContent = "로그인";
-        authLink.href = "login.html";
-        authLink.onclick = null;
-    }
-}
-
-updateAuthLink(localStorage.getItem("nova_access_token"));
-
-async function showAdminLinkForAdmins() {
-    const token = localStorage.getItem("nova_access_token");
-    if (!token) return;
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!response.ok) return;
-        const user = await response.json();
-        adminLink.hidden = !user.is_admin;
-    } catch (error) { console.error("관리자 메뉴 권한 확인 실패", error); }
-}
-showAdminLinkForAdmins();
 
 function renderVideos(query = "") {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const filtered = allVideos.filter(v => (v.title || "").toLocaleLowerCase().includes(normalizedQuery));
-    if (normalizedQuery) filtered.sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
     videoGrid.replaceChildren();
-    pageTitle.textContent = normalizedQuery ? `검색 결과 · 좋아요순 (${filtered.length})` : "최신 영상";
+    pageTitle.textContent = normalizedQuery ? `검색 결과 (${filtered.length})` : "최신 영상";
     if (!filtered.length) {
         const p = document.createElement("p");
         p.textContent = normalizedQuery ? "검색 결과가 없습니다. 다른 제목으로 검색해 보세요." : "아직 업로드된 영상이 없습니다.";
@@ -91,7 +50,7 @@ function renderVideos(query = "") {
         const title = document.createElement("h2");
         title.textContent = v.title;
         const label = document.createElement("p");
-        label.textContent = `${v.uploader_name || "NOVA"} · 좋아요 ${v.like_count || 0}`;
+        label.textContent = "NOVA";
         card.append(preview, title, label);
         card.addEventListener("click", () => location.href = `player.html?video=${encodeURIComponent(v.id)}`);
         videoGrid.appendChild(card);
