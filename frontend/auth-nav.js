@@ -17,16 +17,24 @@ export async function initAuthNav() {
         if (!u) return;
         const displayName = u.nickname || u.username || "사용자";
         const isAdmin = Boolean(u.is_admin || u.role === "admin");
-        const adminBadge = isAdmin
-            ? '<span class="admin-badge" style="background: #e50914; color: white; padding: 2px 7px; border-radius: 4px; font-size: 11px; margin-right: 6px; font-weight: bold; letter-spacing: -0.5px;">관리자</span>'
-            : '';
-
         const pathname = window.location.pathname;
         const isUpload = pathname.endsWith("upload.html");
         const isPlayer = pathname.endsWith("player.html");
+        const isAdminPage = pathname.endsWith("admin.html");
+
+        let adminBtnHtml = "";
+        if (isAdmin) {
+            adminBtnHtml = `
+                <a href="admin.html" style="background: #e50914; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; text-decoration: none; margin-right: 8px; display: inline-flex; align-items: center; cursor: pointer;">
+                    관리자
+                </a>
+            `;
+        }
 
         let linksHtml = "";
-        if (isUpload) {
+        if (isAdminPage) {
+            linksHtml = '<a href="index.html">홈</a><a href="upload.html">업로드</a>';
+        } else if (isUpload) {
             linksHtml = '<a href="index.html">홈</a>';
         } else if (isPlayer) {
             linksHtml = '<a href="index.html">홈</a><a href="upload.html">업로드</a>';
@@ -35,8 +43,9 @@ export async function initAuthNav() {
         }
 
         navButtons.innerHTML = `
-            <span class="user-greeting" style="color: #4da6ff; font-weight: bold; display: inline-flex; align-items: center;">
-                ${adminBadge}${displayName} 님
+            ${adminBtnHtml}
+            <span class="user-greeting" style="color: #4da6ff; font-weight: bold; display: inline-flex; align-items: center; margin-right: 4px;">
+                ${displayName} 님
             </span>
             ${linksHtml}
             <a href="#" id="novaLogoutBtn" style="color: #aaa; cursor: pointer;">로그아웃</a>

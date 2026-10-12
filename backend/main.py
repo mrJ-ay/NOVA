@@ -11,7 +11,7 @@ app = FastAPI(title="NOVA API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "apikey"],
 )
 
@@ -207,3 +207,43 @@ async def upload_video(
             await client.delete(f"{SUPABASE_URL}/storage/v1/object/videos/{encoded_path}", headers=headers)
         raise_upstream(row_response)
     return {"message": "영상 업로드 성공", "title": title}
+
+
+@app.delete("/api/videos/{video_id}")
+async def delete_video(
+    video_id: str,
+    authorization: str | None = Header(default=None),
+):
+    oneid_user = verify_oneid_access_token(authorization)
+    is_admin = bool(oneid_user.get("is_admin") or oneid_user.get("role") == "admin")
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="관리자만 영상을 삭제할 수 있습니다.")
+
+    headers = service_headers()
+    async with httpx.AsyncClient(timeout=30) as client:
+        get_response = await client.get(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers=headers,
+            params={"id": f"eq.{video_id}", "select": "id,storage_path", "limit": "1"},
+        )
+        raise_upstream(get_response)
+        rows = get_response.json()
+        if not rows:
+            raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
+
+        storage_path = rows[0]["storage_path"]
+        encoded_path = quote(storage_path, safe="/")
+
+        await client.delete(
+            f"{SUPABASE_URL}/storage/v1/object/videos/{encoded_path}",
+            headers=headers,
+        )
+
+        delete_response = await client.delete(
+            f"{SUPABASE_URL}/rest/v1/videos",
+            headers=headers,
+            params={"id": f"eq.{video_id}"},
+        )
+        raise_upstream(delete_response)
+
+    return {"message": "영상이 삭제되었습니다.", "video_id": video_id}
