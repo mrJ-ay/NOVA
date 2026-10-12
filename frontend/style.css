@@ -50,12 +50,26 @@ body {
 .nav-buttons {
     margin-left: auto;
     display: flex;
+    align-items: center;
     gap: 20px;
 }
 
 .nav-buttons a {
     color: white;
     text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.nav-buttons a:hover {
+    color: #4da6ff;
+}
+
+.user-greeting {
+    display: inline-flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: #4da6ff;
 }
 
 .container {

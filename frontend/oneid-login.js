@@ -65,6 +65,11 @@ async function completeLogin() {
     const session = await response.json();
     if (!response.ok || !session.access_token) throw new Error(session.detail || "ONEID 로그인을 완료하지 못했습니다.");
     sessionStorage.setItem(ONEID_TOKEN_KEY, session.access_token);
+    localStorage.setItem(ONEID_TOKEN_KEY, session.access_token);
+    if (session.user) {
+        sessionStorage.setItem("nova_user", JSON.stringify(session.user));
+        localStorage.setItem("nova_user", JSON.stringify(session.user));
+    }
     await finishSiteLogin({});
 }
 

@@ -21,6 +21,9 @@
 </main>
 <script type="module">
 import { API_BASE_URL } from "./api-config.js";
+import { initAuthNav } from "./auth-nav.js";
+
+initAuthNav();
 const videoGrid = document.getElementById("videoGrid");
 const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");

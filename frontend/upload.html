@@ -17,6 +17,9 @@
 </main>
 <script type="module">
 import { API_BASE_URL } from "./api-config.js";
+import { initAuthNav } from "./auth-nav.js";
+
+initAuthNav();
 const titleInput = document.getElementById("title");
 const fileInput = document.getElementById("videoFile");
 const button = document.getElementById("uploadButton");
@@ -28,7 +31,7 @@ async function uploadVideo() {
     const file = fileInput.files[0];
     if (!title) { message.textContent = "영상 제목을 입력하세요."; return; }
     if (!file) { message.textContent = "영상을 선택하세요."; return; }
-    const oneidToken = sessionStorage.getItem("nova_oneid_access_token");
+    const oneidToken = sessionStorage.getItem("nova_oneid_access_token") || localStorage.getItem("nova_oneid_access_token");
     if (!oneidToken) { sessionStorage.setItem("nova_login_return_to", "upload.html"); location.assign("login.html?returnTo=upload.html"); return; }
     button.disabled = true;
     message.textContent = "영상 업로드 중...";

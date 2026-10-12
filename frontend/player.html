@@ -15,6 +15,9 @@
 </main>
 <script type="module">
 import { API_BASE_URL } from "./api-config.js";
+import { initAuthNav } from "./auth-nav.js";
+
+initAuthNav();
 const videoId = new URLSearchParams(location.search).get("video");
 const player = document.getElementById("player");
 const title = document.getElementById("videoTitle");
