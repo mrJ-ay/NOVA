@@ -48,6 +48,7 @@ export async function initAuthNav() {
                 ${displayName} 님
             </span>
             ${linksHtml}
+            <a href="https://oneid-helpdesk.onrender.com/?service=NOVA" target="_blank" rel="noopener">고객센터</a>
             <a href="#" id="novaLogoutBtn" style="color: #aaa; cursor: pointer;">로그아웃</a>
         `;
 
